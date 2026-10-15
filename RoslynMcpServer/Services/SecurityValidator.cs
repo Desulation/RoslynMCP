@@ -4,7 +4,7 @@ namespace RoslynMcpServer.Services
 {
     public class SecurityValidator
     {
-        private readonly HashSet<string> _allowedExtensions = new() { ".sln", ".csproj" };
+        private readonly HashSet<string> _allowedExtensions = new() { ".sln", ".slnx", ".csproj" };
         private readonly Regex _safePath = new(@"^[a-zA-Z]:[\\/][^<>:|?*]+$");
         
         public bool ValidateSolutionPath(string path)
