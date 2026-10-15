@@ -32,7 +32,7 @@ namespace RoslynMcpServer
                 }
             }
 
-            var builder = Host.CreateApplicationBuilder(args);
+            var builder = WebApplication.CreateBuilder(args);
 
             // Configure logging for MCP integration - ensure all logs go to stderr
             builder.Logging.ClearProviders();
@@ -56,15 +56,21 @@ namespace RoslynMcpServer
             {
                 builder.Services
                     .AddMcpServer()
-                    .WithStdioServerTransport()
+                    .WithHttpTransport(options =>
+                    {
+                        options.Stateless = true;
+                    })
                     .WithToolsFromAssembly();
 
-                var host = builder.Build();
+                var app = builder.Build();
 
-                var logger = host.Services.GetRequiredService<ILogger<Program>>();
+                var logger = app.Services.GetRequiredService<ILogger<Program>>();
                 logger.LogInformation("Starting Roslyn MCP Server...");
 
-                await host.RunAsync();
+                app.MapMcp();
+                app.UseHttpsRedirection();
+
+                app.Run();
             }
             catch (Exception ex)
             {

@@ -46,6 +46,10 @@ namespace RoslynMcpServer.Services
             {
                 solution = await workspace.OpenSolutionAsync(fullPath);
             }
+            else if (extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
+            {
+                solution = await workspace.OpenSolutionAsync(fullPath);
+            }
             else if (extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
             {
                 var project = await workspace.OpenProjectAsync(fullPath);
@@ -53,7 +57,7 @@ namespace RoslynMcpServer.Services
             }
             else
             {
-                throw new NotSupportedException("Only .sln and .csproj files are supported.");
+                throw new NotSupportedException("Only .sln, .slnx, and .csproj files are supported.");
             }
 
             _workspaces[fullPath] = workspace;

@@ -1,6 +1,6 @@
 # Roslyn MCP Server
 
-A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn compiler platform to provide Claude Desktop with code analysis and navigation capabilities for C# codebases.
+A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn compiler platform to provide Claude Desktop or LM Studio with code analysis and navigation capabilities for C# codebases.
 
 ## Features
 
@@ -14,9 +14,9 @@ A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn
 
 ## Prerequisites
 
-- .NET 8.0 SDK or later
-- Visual Studio 2022 or VS Code (recommended for development)
-- Claude Desktop application
+- .NET 10.0 SDK or later
+- Visual Studio 2026
+- LM Studio
 
 ## Installation
 
@@ -39,6 +39,23 @@ A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn
    ```bash
    dotnet run
    ```
+
+## Setup LM Studio
+1. Open up the right sidebar clocking the icon in the top right.
+2. Under the "Integrations" tab click Install to edit your mcp.json
+3. Edit your mcp.json to look something like this.
+
+* Using URL
+```json
+{
+  "mcpServers": {
+    "RoslynExplorer": {
+      "url": "http://localhost:16488"      
+    }
+  }
+}
+```
+
 
 ## Claude Desktop Configuration
 

@@ -1,0 +1,117 @@
+# For more info on HTTP files go to https://aka.ms/vs/httpfile
+
+@hostAddress = http://localhost:16488
+@mcpPath = /
+
+@solutionPath = "<path-placeholder(escape directories with double forward slashes)>"
+
+### List MCP tools
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}
+
+### SearchSymbols
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "search_symbols",
+    "arguments": {
+      "pattern": "",
+      "solutionPath": {{solutionPath}},
+      "symbolTypes": "class,interface,method,property",
+      "ignoreCase": true
+    }
+  }
+}
+
+### FindReferences
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "find_references",
+    "arguments": {
+      "symbolName": "",
+      "solutionPath": {{solutionPath}},
+      "includeDefinition": true
+    }
+  }
+}
+
+### GetSymbolInfo
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "get_symbol_info",
+    "arguments": {
+      "symbolName": "",
+      "solutionPath": {{solutionPath}}
+    }
+  }
+}
+
+### AnalyzeDependencies
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "analyze_dependencies",
+    "arguments": {
+      "solutionPath": {{solutionPath}},
+      "maxDepth": 3
+    }
+  }
+}
+
+### AnalyzeCodeComplexity
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 6,
+  "method": "tools/call",
+  "params": {
+    "name": "analyze_code_complexity",
+    "arguments": {
+      "solutionPath": {{solutionPath}},
+      "threshold": 5
+    }
+  }
+}
