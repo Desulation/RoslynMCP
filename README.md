@@ -1,6 +1,6 @@
 # Roslyn MCP Server
 
-A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn compiler platform to provide Claude Desktop with code analysis and navigation capabilities for C# codebases.
+A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn compiler platform to provide Claude Desktop or LM Studio with code analysis and navigation capabilities for C# codebases.
 
 ## Features
 
@@ -14,16 +14,15 @@ A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn
 
 ## Prerequisites
 
-- .NET 8.0 SDK or later
-- Visual Studio 2022 or VS Code (recommended for development)
-- Claude Desktop application
+- .NET 10.0 SDK or later
+- Visual Studio 2026
+- LM Studio
 
 ## Installation
 
 1. **Clone or download the project**
    ```bash
-   git clone https://github.com/carquiza/RoslynMCP.git
-   cd RoslynMCP/RoslynMcpServer
+   cd D:\Source\RoslynMCP\RoslynMcpServer
    ```
 
 2. **Restore NuGet packages**
@@ -41,57 +40,25 @@ A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn
    dotnet run
    ```
 
-## Quick Setup
+## Setup LM Studio
+1. Open up the right sidebar clocking the icon in the top right.
+2. Under the "Integrations" tab click Install to edit your mcp.json
+3. Edit your mcp.json to look something like this.
 
-### Windows
-Run the PowerShell setup script:
-```powershell
-.\setup.ps1
-```
-
-### Linux/macOS
-Run the installation test:
-```bash
-./test-installation.sh
-```
-
-## Claude Desktop Configuration
-
-To connect this MCP server to Claude Desktop, you need to modify the Claude Desktop configuration file:
-
-### Configuration File Location
-
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-### Configuration Content
-
-Add the following to your `claude_desktop_config.json` file:
-
+* Using URL
 ```json
 {
   "mcpServers": {
-    "roslyn-code-navigator": {
-      "command": "dotnet",
-      "args": [
-        "run", 
-        "--project", 
-        "/path/to/RoslynMCP/RoslynMcpServer"
-      ],
-      "env": {
-        "DOTNET_ENVIRONMENT": "Production",
-        "LOG_LEVEL": "Information"
-      }
+    "RoslynExplorer": {
+      "url": "http://localhost:16488"      
     }
   }
 }
 ```
 
-**Important**: Replace `/path/to/RoslynMCP/RoslynMcpServer` with the actual absolute path to your project directory.
-
 ## Usage
 
-Once configured, restart Claude Desktop. You should see the Roslyn MCP Server appear in the available tools. Here are some example queries:
+Once configured, Here are some example queries:
 
 ### Search for Symbols
 ```
@@ -130,34 +97,10 @@ Find methods with complexity higher than 7 in C:\MyProject\MyProject.sln
 
 ### Using MCP Inspector
 
-For development and testing, you can use the MCP Inspector:
+For development and testing, you can use RoslynMcpServer.http:
 
-```bash
-# Install the inspector
-npm install -g @modelcontextprotocol/inspector
-
-# Test your server
-npx @modelcontextprotocol/inspector dotnet run --project ./RoslynMcpServer
-```
-
-## Architecture
-
-The server features a modular architecture with:
-
-- **MCP Server Layer**: Handles communication with Claude Desktop
-- **Roslyn Integration Layer**: Manages workspaces and compilations
-- **Search Engine Layer**: Implements symbol search and analysis
-- **Multi-level Caching**: Performance optimization for large codebases
-- **Security Layer**: Input validation and sanitization
+1. Update solutionPath in RoslynMcpServer.http to point to your .sln file. You can also modify the search pattern and symbol type as needed.
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Author
-
-Christopher Arquiza
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
