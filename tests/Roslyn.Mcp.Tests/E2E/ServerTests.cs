@@ -91,7 +91,7 @@ public sealed class ServerTests
     }
 
     [TestMethod]
-    public void Version_PrintsDirectoryBuildPropsVersion()
+    public async Task Version_PrintsDirectoryBuildPropsVersion()
     {
         var propsPath = Path.GetFullPath(Path.Combine(TestPaths.FixturesDir, "..", "..", "Directory.Build.props"));
         var expected = XDocument.Load(propsPath).Descendants("Version").Single().Value.Trim();
@@ -105,12 +105,30 @@ public sealed class ServerTests
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Could not start roslyn-mcp --version.");
-        var stderr = process.StandardError.ReadToEndAsync();
-        var stdout = process.StandardOutput.ReadToEnd();
-        Assert.IsTrue(process.WaitForExit(CallTimeout), "roslyn-mcp --version did not exit.");
+        try
+        {
+            // Read both streams concurrently and bound everything by the timeout, so a server that
+            // never exits (or never closes stdout) fails the test instead of hanging it.
+            using var timeout = new CancellationTokenSource(CallTimeout);
+            var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail($"roslyn-mcp --version did not exit within {CallTimeout.TotalSeconds} s.");
+            }
 
-        Assert.AreEqual(0, process.ExitCode, stderr.GetAwaiter().GetResult());
-        Assert.AreEqual(expected, stdout.Trim());
+            Assert.AreEqual(0, process.ExitCode, await stderr);
+            Assert.AreEqual(expected, (await stdout).Trim());
+        }
+        finally
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
     }
 
     [TestMethod]
