@@ -1,72 +1,10 @@
 # Roslyn MCP Server
 
-A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn compiler platform to provide Claude Desktop, LM Studio, VS Code or Visual Studio with code analysis and navigation capabilities for C# codebases.
+Roslyn MCP is a read-only MCP (Model Context Protocol) server that gives a model the C# compiler's semantic view of a codebase: symbols, references, implementations, callers, compiler diagnostics and complexity, answered by Roslyn over stdio.
+It is built as the companion to the [.NET MCP Server (dotnet-mcp)](https://github.com/jongalloway/dotnet-mcp), which drives the .NET SDK, and works with Claude Desktop, Claude Code, VS Code, Visual Studio, LM Studio and any other MCP client.
 
-It is built to complement the [.NET MCP Server (dotnet-mcp)](https://github.com/jongalloway/dotnet-mcp): dotnet-mcp drives the .NET SDK (create, add packages, build, test, run) and this server gives the model a read-only, semantic view of the code. See [Using with the .NET MCP Server](#using-with-the-net-mcp-server-dotnet-mcp).
+## How this expands on dotnet-mcp
 
-## Features
-
-- **Wildcard Symbol Search** - Find classes, methods, and properties using pattern matching (`*Service`, `Get*User`, etc.)
-- **Reference Tracking** - Locate all usages of symbols across entire solutions
-- **Implementations and Callers** - Find interface implementations, derived classes, overrides and call sites
-- **File Outlines** - List a file's types and members with line ranges so only the relevant lines need reading
-- **Compiler Diagnostics** - Errors and warnings from the live workspace without running a build
-- **Stays in Sync** - Picks up edits, new files, package and project changes made by you or by dotnet-mcp
-- **Symbol Information** - Get detailed information about types, methods, properties, and more
-- **Dependency Analysis** - Analyze project dependencies and namespace usage patterns
-- **Code Complexity Analysis** - Identify high-complexity methods using cyclomatic complexity metrics
-- **Performance Optimized** - Cached workspace with incremental updates for edited files
-- **Security** - Input validation and path sanitization
-
-## Prerequisites
-
-- .NET 10.0 SDK or later
-- Visual Studio 2026
-- LM Studio
-
-## Installation
-
-1. **Clone or download the project**
-   ```bash
-   cd D:\Source\RoslynMCP\RoslynMcpServer
-   ```
-
-2. **Restore NuGet packages**
-   ```bash
-   dotnet restore
-   ```
-
-3. **Build the project**
-   ```bash
-   dotnet build
-   ```
-
-4. **Test the server** (optional)
-   ```bash
-   dotnet run
-   ```
-
-## Setup LM Studio
-1. Open up the right sidebar clocking the icon in the top right.
-2. Under the "Integrations" tab click Install to edit your mcp.json
-3. Edit your mcp.json to look something like this.
-
-* Using URL (start the server first with `dotnet run` in `RoslynMcpServer`)
-```json
-{
-  "mcpServers": {
-    "RoslynExplorer": {
-      "url": "http://localhost:16488"
-    }
-  }
-}
-```
-
-* Or let LM Studio start it over stdio, next to dotnet-mcp. See [Configuring both servers](#configuring-both-servers).
-
-## Using with the .NET MCP Server (dotnet-mcp)
-
-This server is designed to sit alongside [jongalloway/dotnet-mcp](https://github.com/jongalloway/dotnet-mcp).
 The two servers cover different sides of .NET work and do not overlap:
 
 | | dotnet-mcp (`dotnet_*`) | Roslyn MCP (`roslyn_*`) |
@@ -75,42 +13,15 @@ The two servers cover different sides of .NET work and do not overlap:
 | Changes things | Yes: new projects, packages, references, EF migrations, format | No, read-only |
 | Typical tools | `dotnet_project` (New/Build/Test/Run), `dotnet_package`, `dotnet_solution`, `dotnet_sdk` | `roslyn_search_symbols`, `roslyn_find_references`, `roslyn_find_callers`, `roslyn_get_diagnostics` |
 
-How they fit together:
+dotnet-mcp's `dotnet_project Analyze`, `Dependencies` and `Validate` evaluate MSBuild: they report the SDK, target frameworks, packages and properties a project file resolves to. Every `roslyn_*` tool instead answers from the compiler's semantic model, so it knows what the code means: which symbols exist, where they are referenced, what implements an interface, who calls a method, which compiler errors a file has and how complex its methods are. Neither server repeats what the other reports.
 
-- **Tool names are namespaced.** dotnet-mcp prefixes its tools with `dotnet_`; this server uses `roslyn_`, so they never collide and the model can tell them apart.
-- **Server instructions.** On connect, this server tells the model to use `dotnet_*` tools to create, build, test and run, and `roslyn_*` tools to understand code. It suggests a loop: locate code with `roslyn_*`, check what a change affects with `roslyn_find_references`/`roslyn_find_callers`, edit, get fast feedback with `roslyn_get_diagnostics`, then confirm with `dotnet_project` Build/Test.
-- **Same paths.** `solutionPath` takes the same solution, project or directory you pass to `dotnet_*` tools.
-- **Stays in sync with dotnet-mcp's changes.** The Roslyn workspace is cached, and every 2 seconds at most a request checks it against the file system:
-  - Edited `.cs` files are updated in place, which is cheap.
-  - Added or removed `.cs` files, a changed `.sln`/`.slnx`/`.csproj`, `Directory.Build.*`, `Directory.Packages.props` or `global.json`, or a restore (`obj/project.assets.json`) trigger a full reload. That covers `dotnet_package Add`, `dotnet_solution Add`, `dotnet_project New` and `dotnet format`.
-  - `roslyn_reload_workspace` forces a reload.
-- **Same transport.** dotnet-mcp runs over stdio. Start this server with `--stdio` to configure both the same way (HTTP is still the default).
+On connect, this server tells the model to use `dotnet_*` tools to create, build, test and run, and `roslyn_*` tools to understand code. It suggests this loop:
 
-### Configuring both servers
-
-Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS), VS Code, Visual Studio and LM Studio all accept this shape:
-
-```json
-{
-  "mcpServers": {
-    "dotnet": {
-      "command": "dnx",
-      "args": ["Community.Mcp.DotNet@1.*", "--yes"]
-    },
-    "roslyn": {
-      "command": "dotnet",
-      "args": [
-        "run", "--project", "C:\\path\\to\\RoslynMCP\\RoslynMcpServer",
-        "--no-launch-profile", "--", "--stdio"
-      ]
-    }
-  }
-}
-```
-
-`--no-launch-profile` stops `dotnet run` from printing launch-profile messages to stdout, which would corrupt the stdio protocol. After a build you can also point `command` at `RoslynMcpServer\bin\Debug\net10.0\RoslynMcpServer.exe` with `"args": ["--stdio"]`, which starts faster.
-
-To use HTTP instead, run `dotnet run` in `RoslynMcpServer` and register `"roslyn": { "url": "http://localhost:16488" }` next to the `dotnet` entry.
+1. **Locate** the code with `roslyn_search_symbols` or `roslyn_get_document_outline`, then read only the relevant line ranges.
+2. **Check impact** with `roslyn_find_references`, `roslyn_find_callers` or `roslyn_find_implementations` before changing a signature.
+3. **Edit** the files.
+4. **Get fast feedback** with `roslyn_get_diagnostics` (pass `filePath` for a single file), without running a build.
+5. **Confirm** with `dotnet_project` Build and Test for the authoritative result.
 
 ### Example prompts that use both
 
@@ -124,74 +35,104 @@ Rename IOrderRepository.Save to SaveAsync: show me all implementations and calle
 I just edited OrderService.cs. Check it for compile errors, and if it's clean run the unit tests.
 ```
 
-## Usage
+### How they fit together
 
-Once configured, here are some example queries:
+- **Tool names are namespaced.** dotnet-mcp prefixes its tools with `dotnet_`; this server uses `roslyn_`, so they never collide and the model can tell them apart.
+- **Same paths.** `solutionPath` takes the same solution, project or directory you pass to `dotnet_*` tools.
+- **Same transport.** Both servers run over stdio.
+- **Stays in sync with dotnet-mcp's changes.** The Roslyn workspace is cached, and at most every 2 seconds a request checks it against the file system:
+  - Edited `.cs` files are updated in place, which is cheap.
+  - Added or removed `.cs` files, a changed `.sln`/`.slnx`/`.csproj`, `Directory.Build.*`, `Directory.Packages.props` or `global.json`, or a restore (`obj/project.assets.json`) trigger a full reload. That covers `dotnet_package Add`, `dotnet_solution Add`, `dotnet_project New` and `dotnet format`.
+  - `roslyn_reload_workspace` forces a reload.
 
-### Search for Symbols
-```
-Search for all classes ending with 'Service' in my solution at C:\MyProject\MyProject.sln
-```
+## Prerequisites
 
-### Find References
-```
-Find all references to the UserRepository class in C:\MyProject\MyProject.sln
-```
+- .NET 10 SDK — required to run, not only to build: the server loads your projects with the installed SDK's MSBuild.
 
-### Get Symbol Information
-```
-Get information about the CalculateTotal method in C:\MyProject\MyProject.sln
-```
+## Install
 
-### Analyze Dependencies
-```
-Analyze dependencies for the solution at C:\MyProject\MyProject.sln
-```
+- **Claude Desktop:** a `.mcpb` bundle for one-click install is planned; until it is published, install from source as below.
+- **Everything else (and Claude Desktop today):** build from source.
 
-### Code Complexity Analysis
-```
-Find methods with complexity higher than 7 in C:\MyProject\MyProject.sln
+```powershell
+git clone https://github.com/Desulation/RoslynMCP.git
+cd RoslynMCP
+dotnet build Roslyn.Mcp.slnx -c Release
 ```
 
-### Find Implementations and Callers
-```
-Show me every class that implements IOrderRepository and everything that calls IOrderRepository.Save in C:\MyProject
+The server is `src/Roslyn.Mcp/bin/Release/net10.0/roslyn-mcp.exe` (`roslyn-mcp` on macOS and Linux). `roslyn-mcp --version` prints its version.
+
+On Windows, `scripts/setup.ps1` (PowerShell 7) builds the server and adds both the `dotnet` and `roslyn` entries to a client config file, keeping any other servers already in it:
+
+```powershell
+pwsh scripts/setup.ps1                                   # Claude Desktop: %APPDATA%\Claude\claude_desktop_config.json
+pwsh scripts/setup.ps1 -ConfigPath C:\path\to\mcp.json   # any other client config file
+pwsh scripts/setup.ps1 -SkipBuild -Configuration Debug   # register an existing Debug build
 ```
 
-### Outline a File and Check It Compiles
-```
-Outline C:\MyProject\Api\OrderService.cs and check it for compiler errors
+## Configure
+
+Register both servers in your client:
+
+```json
+{
+  "mcpServers": {
+    "dotnet": { "command": "dnx", "args": ["Community.Mcp.DotNet@1.*", "--yes"] },
+    "roslyn": { "command": "C:\\path\\to\\RoslynMCP\\src\\Roslyn.Mcp\\bin\\Release\\net10.0\\roslyn-mcp.exe" }
+  }
+}
 ```
 
-## Available Tools
+- Claude Desktop reads `%APPDATA%\Claude\claude_desktop_config.json` on Windows and `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS. Claude Code and LM Studio accept the same `mcpServers` shape.
+- VS Code and Visual Studio use a top-level `servers` key instead of `mcpServers`; the two entries are the same.
+- On macOS and Linux, point `command` at `.../net10.0/roslyn-mcp` (no `.exe`).
+- The server needs no arguments. `--stdio` is accepted and ignored, so older configs that pass it keep working.
+
+## Tools
 
 | Tool | What it does |
 |------|--------------|
-| `roslyn_search_symbols` | Wildcard search (`*Service`, `Get*User`) over symbols declared in source |
-| `roslyn_find_references` | Every reference to a symbol, with the line text |
+| `roslyn_search_symbols` | Wildcard search (`*Service`, `Get*User`, `OrderService<*>`) over symbols declared in source; `symbolTypes` filters by class, interface, struct, enum, record, delegate, method, property, field, event or namespace |
+| `roslyn_find_references` | Every reference to a symbol, with the line text; `includeDefinition` adds the declaration sites |
 | `roslyn_get_symbol_info` | Kind, signature, accessibility, attributes and declaration location |
 | `roslyn_find_implementations` | Implementations of an interface/member, derived classes, overrides |
 | `roslyn_find_callers` | Methods/properties that call a method (one level of the call hierarchy) |
 | `roslyn_get_document_outline` | Types and members in a `.cs` file with signatures and line ranges |
 | `roslyn_get_diagnostics` | Compiler errors/warnings from the in-memory workspace, no build needed |
-| `roslyn_analyze_dependencies` | Symbol counts, project/assembly references, namespace usage |
-| `roslyn_analyze_code_complexity` | Methods at or above a cyclomatic complexity threshold |
-| `roslyn_reload_workspace` | Drop the cached workspace and reload the solution |
+| `roslyn_analyze_dependencies` | Per-project symbol counts, the project-reference graph as compiled, and the most used namespaces (`maxNamespaces`, default 20); for NuGet packages use `dotnet_package List` |
+| `roslyn_analyze_code_complexity` | Methods, constructors, operators and accessors at or above a cyclomatic complexity threshold |
+| `roslyn_reload_workspace` | Drop the cached workspace, reload the solution and list MSBuild load warnings |
 
 All tools are read-only and annotated as such (`readOnlyHint`), so clients can auto-approve them.
 
-Symbol names can be simple (`Save`) or qualified to disambiguate (`OrderService.Save`, `MyApp.Services.OrderService`).
+Symbol names can be simple (`Save`) or qualified to disambiguate (`OrderService.Save`, `MyApp.Services.OrderService`); `OrderService.Save` also finds `OrderService<T>.Save`.
 `solutionPath` accepts a `.sln`, `.slnx` or `.csproj` file, or a directory that contains exactly one of them.
 
-> **Upgrading:** tool names used to be `search_symbols`, `find_references`, etc. They now carry the `roslyn_` prefix. Update any allowlists or saved requests.
+> **Upgrading:** tool names used to be `search_symbols`, `find_references`, etc. They now carry the `roslyn_` prefix. `roslyn_analyze_dependencies` takes `maxNamespaces` instead of `maxDepth` and no longer lists NuGet packages or referenced assemblies (use `dotnet_package List` and `dotnet_project Dependencies`).
 
-## Development and Testing
+## Troubleshooting
 
-### Using MCP Inspector
+- **Lots of `CS0246`/`CS0234` "type or namespace not found" errors.** Packages are not restored. `roslyn_get_diagnostics` puts an `RMCP001` entry at the top of the list when this happens. Run `dotnet_project Restore` (or `dotnet restore`); the workspace reloads by itself once `obj/project.assets.json` changes.
+- **"Workspace loaded with N MSBuild warnings".** The first result after a load ends with this note once. Call `roslyn_reload_workspace` to see the warnings; they usually name a missing SDK, workload or project file.
+- **"Multiple solution files found" / "Multiple project files found".** `solutionPath` is a directory with more than one `.sln`/`.slnx` (or, without a solution, more than one `.csproj`). Pass the file you want.
+- **"Failed to register MSBuild" on startup.** No .NET 10 SDK was found. Install it; a runtime alone is not enough.
 
-For development and testing, you can use RoslynMcpServer.http:
+## Development
 
-1. Update solutionPath in RoslynMcpServer.http to point to your .sln file. You can also modify the search pattern and symbol type as needed.
+```powershell
+dotnet build Roslyn.Mcp.slnx
+dotnet test                       # run from the repo root
+```
+
+`dotnet test` must run from the repository root: `global.json` there selects Microsoft.Testing.Platform as the test runner. The end-to-end tests start the built `roslyn-mcp` over stdio, against the sample solution in `tests/fixtures/SampleSolution`.
+
+To try the tools interactively, start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) on a Debug build:
+
+```powershell
+npx @modelcontextprotocol/inspector src/Roslyn.Mcp/bin/Debug/net10.0/roslyn-mcp.exe
+```
+
+This repository's `.mcp.json` registers the Debug build for Claude Code. See [AGENTS.md](AGENTS.md) for layout and conventions.
 
 ## License
 
