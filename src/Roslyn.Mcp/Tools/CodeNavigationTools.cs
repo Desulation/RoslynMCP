@@ -28,6 +28,7 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> SearchSymbols(
             SecurityValidator validator,
             SymbolSearchService searchService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description("Wildcard pattern to search for (e.g., 'User*', '*Service', 'Get*User')")] string pattern,
             [Description(SolutionPathDescription)] string solutionPath,
@@ -49,7 +50,7 @@ namespace Roslyn.Mcp.Tools
                 return Task.FromResult("Error: " + ex.Message);
             }
 
-            return ExecuteAsync(validator, logger, solutionPath, "symbol search", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "symbol search", async () =>
             {
                 var results = await searchService.SearchSymbolsAsync(
                     pattern, solutionPath, filter, ignoreCase, cancellationToken);
@@ -64,13 +65,14 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> FindReferences(
             SecurityValidator validator,
             SymbolSearchService searchService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description(SymbolNameDescription)] string symbolName,
             [Description(SolutionPathDescription)] string solutionPath,
             [Description("Include symbol definition in results")] bool includeDefinition = true,
             CancellationToken cancellationToken = default)
         {
-            return ExecuteAsync(validator, logger, solutionPath, "find references", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "find references", async () =>
             {
                 var results = await searchService.FindReferencesAsync(
                     symbolName, solutionPath, includeDefinition, cancellationToken);
@@ -84,12 +86,13 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> GetSymbolInfo(
             SecurityValidator validator,
             SymbolSearchService searchService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description(SymbolNameDescription)] string symbolName,
             [Description(SolutionPathDescription)] string solutionPath,
             CancellationToken cancellationToken = default)
         {
-            return ExecuteAsync(validator, logger, solutionPath, "get symbol info", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "get symbol info", async () =>
             {
                 var info = await searchService.GetSymbolInfoAsync(symbolName, solutionPath, cancellationToken);
                 return ResultFormatter.SymbolInfo(info);
@@ -103,12 +106,13 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> FindImplementations(
             SecurityValidator validator,
             SymbolSearchService searchService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description(SymbolNameDescription)] string symbolName,
             [Description(SolutionPathDescription)] string solutionPath,
             CancellationToken cancellationToken = default)
         {
-            return ExecuteAsync(validator, logger, solutionPath, "find implementations", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "find implementations", async () =>
             {
                 var results = await searchService.FindImplementationsAsync(symbolName, solutionPath, cancellationToken);
                 return ResultFormatter.Locations(results, $"implementations of '{symbolName}'");
@@ -122,12 +126,13 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> FindCallers(
             SecurityValidator validator,
             SymbolSearchService searchService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description(SymbolNameDescription)] string symbolName,
             [Description(SolutionPathDescription)] string solutionPath,
             CancellationToken cancellationToken = default)
         {
-            return ExecuteAsync(validator, logger, solutionPath, "find callers", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "find callers", async () =>
             {
                 var results = await searchService.FindCallersAsync(symbolName, solutionPath, cancellationToken);
                 return ResultFormatter.Locations(results, $"callers of '{symbolName}'");
@@ -141,6 +146,7 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> GetDocumentOutline(
             SecurityValidator validator,
             CodeAnalysisService analysisService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description("Absolute path to a .cs file in the solution")] string filePath,
             [Description(SolutionPathDescription)] string solutionPath,
@@ -149,7 +155,7 @@ namespace Roslyn.Mcp.Tools
             if (!validator.ValidateSourceFilePath(filePath))
                 return Task.FromResult("Error: Invalid file path provided. Pass an absolute path to an existing .cs file.");
 
-            return ExecuteAsync(validator, logger, solutionPath, "document outline", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "document outline", async () =>
             {
                 var entries = await analysisService.GetDocumentOutlineAsync(solutionPath, filePath, cancellationToken);
                 return ResultFormatter.Outline(filePath, entries);
@@ -165,6 +171,7 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> GetDiagnostics(
             SecurityValidator validator,
             CodeAnalysisService analysisService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description(SolutionPathDescription)] string solutionPath,
             [Description("Optional absolute path to a single .cs file to check (much faster than the whole solution)")] string? filePath = null,
@@ -178,7 +185,7 @@ namespace Roslyn.Mcp.Tools
             if (!Enum.TryParse<DiagnosticSeverity>(minimumSeverity, ignoreCase: true, out var severity))
                 return Task.FromResult("Error: minimumSeverity must be Error, Warning or Info.");
 
-            return ExecuteAsync(validator, logger, solutionPath, "get diagnostics", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "get diagnostics", async () =>
             {
                 var diagnostics = await analysisService.GetDiagnosticsAsync(solutionPath, filePath, severity, cancellationToken);
                 return ResultFormatter.Diagnostics(diagnostics, Math.Max(1, maxResults));
@@ -193,12 +200,13 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> AnalyzeDependencies(
             SecurityValidator validator,
             CodeAnalysisService analysisService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description(SolutionPathDescription)] string solutionPath,
             [Description("Maximum number of namespaces to list, most used first")] int maxNamespaces = 20,
             CancellationToken cancellationToken = default)
         {
-            return ExecuteAsync(validator, logger, solutionPath, "dependency analysis", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "dependency analysis", async () =>
             {
                 var dependencies = await analysisService.AnalyzeDependenciesAsync(solutionPath, maxNamespaces, cancellationToken);
                 return ResultFormatter.Dependencies(dependencies);
@@ -211,12 +219,13 @@ namespace Roslyn.Mcp.Tools
         public static Task<string> AnalyzeCodeComplexity(
             SecurityValidator validator,
             CodeAnalysisService analysisService,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description(SolutionPathDescription)] string solutionPath,
             [Description("Complexity threshold (1-10)")] int threshold = 5,
             CancellationToken cancellationToken = default)
         {
-            return ExecuteAsync(validator, logger, solutionPath, "complexity analysis", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "complexity analysis", async () =>
             {
                 var results = await analysisService.AnalyzeComplexityAsync(solutionPath, threshold, cancellationToken);
                 return ResultFormatter.Complexity(results);
@@ -229,24 +238,29 @@ namespace Roslyn.Mcp.Tools
                      "itself when files change on disk; use this if results still look stale, or to see MSBuild load warnings.")]
         public static Task<string> ReloadWorkspace(
             SecurityValidator validator,
-            WorkspaceManager workspaceManager,
+            WorkspaceManager workspaces,
             ILogger<CodeNavigationTools> logger,
             [Description(SolutionPathDescription)] string solutionPath,
             CancellationToken cancellationToken = default)
         {
-            return ExecuteAsync(validator, logger, solutionPath, "reload workspace", async () =>
+            return ExecuteAsync(validator, workspaces, logger, solutionPath, "reload workspace", async () =>
             {
-                var summary = await workspaceManager.ReloadAsync(solutionPath, cancellationToken);
+                var summary = await workspaces.ReloadAsync(solutionPath, cancellationToken);
+
+                // This result lists the warnings themselves, so the next tool call must not repeat them as a hint.
+                workspaces.TryTakeLoadHint(solutionPath, out _);
                 return ResultFormatter.WorkspaceSummary(summary);
-            });
+            }, appendLoadHint: false);
         }
 
-        private static async Task<string> ExecuteAsync(
+        internal static async Task<string> ExecuteAsync(
             SecurityValidator validator,
+            WorkspaceManager workspaces,
             ILogger logger,
             string solutionPath,
             string operation,
-            Func<Task<string>> action)
+            Func<Task<string>> action,
+            bool appendLoadHint = true)
         {
             if (!validator.ValidateSolutionPath(solutionPath))
             {
@@ -256,7 +270,16 @@ namespace Roslyn.Mcp.Tools
 
             try
             {
-                return await action();
+                var result = await action();
+
+                // Only a successful result announces the load warnings, so an error never uses up the hint.
+                if (appendLoadHint && workspaces.TryTakeLoadHint(solutionPath, out var warningCount))
+                {
+                    result += $"\n(Workspace loaded with {warningCount} MSBuild warnings; " +
+                              "call roslyn_reload_workspace to see them.)";
+                }
+
+                return result;
             }
             catch (OperationCanceledException)
             {
