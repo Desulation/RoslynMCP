@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <EnableMSTestRunner>true</EnableMSTestRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!-- Test names use Method_Scenario (CA1707); expected values are inline array literals (CA1861). -->
+    <NoWarn>$(NoWarn);CA1707;CA1861</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ExeSuffix Condition="$([MSBuild]::IsOSPlatform('Windows'))">.exe</ExeSuffix>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="FixturesDir" Value="$(MSBuildThisFileDirectory)../fixtures" />
+    <AssemblyMetadata Include="ServerExePath" Value="$(MSBuildThisFileDirectory)../../src/Roslyn.Mcp/bin/$(Configuration)/net10.0/roslyn-mcp$(ExeSuffix)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" />
+    <!-- Pins the compile-time version without copying Microsoft.Build.* into the output (MSBuildLocator requirement). -->
+    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Roslyn.Mcp/Roslyn.Mcp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>

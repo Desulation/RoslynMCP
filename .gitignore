@@ -3,6 +3,9 @@
 [Oo]bj/
 artifacts/
 *.mcpb
+# Test fixture build output (also matched by the patterns above; listed so the intent is explicit)
+tests/fixtures/**/bin/
+tests/fixtures/**/obj/
 
 # IDE
 .vs/
