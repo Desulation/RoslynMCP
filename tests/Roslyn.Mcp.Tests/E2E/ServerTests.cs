@@ -38,7 +38,14 @@ public sealed class ServerTests
     public static async Task ClassInitialize(TestContext _)
     {
         if (!File.Exists(TestPaths.ServerExePath))
-            Assert.Inconclusive($"Server executable not built: {TestPaths.ServerExePath}");
+        {
+            // Inconclusive is for local runs without a build; in CI a missing server means a broken
+            // path, which must fail the run rather than leave it green.
+            var message = $"Server executable not built: {TestPaths.ServerExePath}";
+            if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+                Assert.Fail(message);
+            Assert.Inconclusive(message);
+        }
 
         // When initialization fails, CreateAsync stops the child process itself before throwing.
         s_client = await StartClientAsync([]);
