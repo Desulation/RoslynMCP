@@ -4,8 +4,8 @@ namespace Roslyn.Mcp.Tests;
 
 internal static class DotnetCli
 {
-    // Set in this process by MSBuildLocator; a child dotnet must resolve its own SDK instead.
-    private static readonly string[] InheritedMSBuildVariables =
+    // Set in this process by MSBuildLocator; a child dotnet (or roslyn-mcp) must resolve its own SDK instead.
+    internal static readonly string[] InheritedMSBuildVariables =
     {
         "MSBUILD_EXE_PATH", "MSBuildExtensionsPath", "MSBuildSDKsPath"
     };
