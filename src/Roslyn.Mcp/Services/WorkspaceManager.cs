@@ -205,21 +205,29 @@ namespace Roslyn.Mcp.Services
             });
 
             Solution solution;
-            var extension = Path.GetExtension(fullPath);
-            if (extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
-                extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                solution = await workspace.OpenSolutionAsync(fullPath, cancellationToken: cancellationToken);
+                var extension = Path.GetExtension(fullPath);
+                if (extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
+                {
+                    solution = await workspace.OpenSolutionAsync(fullPath, cancellationToken: cancellationToken);
+                }
+                else if (extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+                {
+                    var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
+                    solution = project.Solution;
+                }
+                else
+                {
+                    throw new NotSupportedException("Only .sln, .slnx, and .csproj files are supported.");
+                }
             }
-            else if (extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+            catch
             {
-                var project = await workspace.OpenProjectAsync(fullPath, cancellationToken: cancellationToken);
-                solution = project.Solution;
-            }
-            else
-            {
+                // A cancelled or failed load would otherwise leave the workspace and its build host running.
                 workspace.Dispose();
-                throw new NotSupportedException("Only .sln, .slnx, and .csproj files are supported.");
+                throw;
             }
 
             var projectDirectories = solution.Projects

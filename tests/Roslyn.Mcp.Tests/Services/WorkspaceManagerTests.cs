@@ -222,6 +222,26 @@ public sealed class WorkspaceManagerTests
     }
 
     [TestMethod]
+    public async Task GetSolutionAsync_CancelledDuringLoad_ThrowsAndNextCallLoads()
+    {
+        using var manager = CreateManager();
+        using var cts = new CancellationTokenSource();
+
+        // GetSolutionAsync runs synchronously into the MSBuild open before it first yields, so
+        // cancelling after it returns cancels the load itself rather than the wait for the gate.
+        var cancelled = manager.GetSolutionAsync(TestPaths.SampleSolutionPath, cts.Token);
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => cancelled);
+        Assert.AreEqual(1, manager.LoadCount);
+
+        var solution = await manager.GetSolutionAsync(TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        Assert.AreEqual(2, manager.LoadCount);
+        Assert.AreEqual(3, solution.Projects.Count());
+    }
+
+    [TestMethod]
     public async Task ReloadAsync_SampleSolution_ListsProjects()
     {
         var summary = await s_manager.ReloadAsync(TestPaths.SampleSolutionPath);
