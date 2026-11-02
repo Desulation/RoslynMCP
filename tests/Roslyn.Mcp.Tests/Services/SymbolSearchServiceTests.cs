@@ -46,6 +46,17 @@ public sealed class SymbolSearchServiceTests
     }
 
     [TestMethod]
+    public async Task SearchSymbolsAsync_PrefixWildcard_DoesNotMatchMembersByOwnerName()
+    {
+        var results = await SearchAsync("Order*", "method");
+
+        var names = results.Select(r => r.Name).ToList();
+        Assert.DoesNotContain("Save", names);
+        Assert.DoesNotContain("Store", names);
+        Assert.DoesNotContain("Validate", names);
+    }
+
+    [TestMethod]
     public async Task SearchSymbolsAsync_QuestionMark_MatchesOneChar()
     {
         var results = await SearchAsync("?rder", "class,record");

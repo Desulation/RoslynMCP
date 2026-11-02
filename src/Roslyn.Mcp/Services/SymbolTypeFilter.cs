@@ -27,7 +27,7 @@ namespace Roslyn.Mcp.Services
         /// <summary>
         /// Parses a comma-separated list of <see cref="AcceptedWords"/>, ignoring case and surrounding spaces.
         /// </summary>
-        /// <exception cref="ArgumentException">A word is not one of <see cref="AcceptedWords"/>.</exception>
+        /// <exception cref="ArgumentException">A word is not one of <see cref="AcceptedWords"/>, or no word is given.</exception>
         public static SymbolTypeFilter Parse(string symbolTypes)
         {
             ArgumentNullException.ThrowIfNull(symbolTypes);
@@ -53,6 +53,9 @@ namespace Roslyn.Mcp.Services
                             $"unknown symbol type '{word}'. Accepted: {string.Join(", ", AcceptedWords)}");
                 }
             }
+
+            if (filter._typeKinds.Count == 0 && filter._symbolKinds.Count == 0 && !filter._records)
+                throw new ArgumentException($"no symbol types given. Accepted: {string.Join(", ", AcceptedWords)}");
 
             return filter;
         }

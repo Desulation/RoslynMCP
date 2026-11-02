@@ -41,6 +41,19 @@ public sealed class SymbolTypeFilterTests
     }
 
     [TestMethod]
+    [DataRow("")]
+    [DataRow(" ")]
+    [DataRow(",")]
+    public void Parse_Empty_ThrowsWithAcceptedList(string symbolTypes)
+    {
+        var ex = Assert.ThrowsExactly<ArgumentException>(() => SymbolTypeFilter.Parse(symbolTypes));
+
+        Assert.AreEqual(
+            "no symbol types given. Accepted: class, interface, struct, enum, record, delegate, method, property, field, event, namespace",
+            ex.Message);
+    }
+
+    [TestMethod]
     public void Parse_MixedCaseAndSpaces_Accepts()
     {
         var filter = SymbolTypeFilter.Parse(" Class , METHOD ");

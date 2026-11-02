@@ -34,7 +34,7 @@ namespace Roslyn.Mcp.Tools
             ILogger<CodeNavigationTools> logger,
             [Description("Wildcard pattern to search for (e.g., 'User*', '*Service', 'Get*User')")] string pattern,
             [Description(SolutionPathDescription)] string solutionPath,
-            [Description("Comma-separated symbol kinds: class, interface, struct, enum, record, delegate, method, property, field, event, namespace")] string symbolTypes = "class,interface,method,property",
+            [Description("Comma-separated symbol kinds: class, interface, struct, enum, record, delegate, method, property, field, event, namespace")] string symbolTypes = "class,interface,struct,enum,delegate,method,property",
             [Description("Whether to ignore case in search")] bool ignoreCase = true,
             CancellationToken cancellationToken = default)
         {

@@ -22,16 +22,15 @@ namespace Roslyn.Mcp.Services
             _resolver = resolver;
         }
 
-        // "OrderService<T>" for a type and "OrderService<T>.Save" for a member, so a pattern such as
+        // A type without its namespace ("OrderService<T>", "Outer.Inner<T>"), so a pattern such as
         // "OrderService<*>" matches without spelling out the namespace.
-        private static readonly SymbolDisplayFormat TypeQualifiedFormat = new(
+        private static readonly SymbolDisplayFormat TypeWithoutNamespaceFormat = new(
             typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
-            genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
-            memberOptions: SymbolDisplayMemberOptions.IncludeContainingType);
+            genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters);
 
         /// <summary>
-        /// Finds source-declared symbols whose name, type-qualified name or full display string matches the
-        /// wildcard <paramref name="pattern"/> (<c>*</c> and <c>?</c>), most relevant first, one result per
+        /// Finds source-declared symbols whose name, full display string or (for types) namespace-free name
+        /// matches the wildcard <paramref name="pattern"/> (<c>*</c> and <c>?</c>), most relevant first, one result per
         /// declaration even when a project has several target frameworks.
         /// </summary>
         public async Task<IReadOnlyList<SymbolSearchResult>> SearchSymbolsAsync(
@@ -67,13 +66,8 @@ namespace Roslyn.Mcp.Services
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    if (filter.Matches(symbol) &&
-                        (regex.IsMatch(symbol.Name) ||
-                         regex.IsMatch(symbol.ToDisplayString(TypeQualifiedFormat)) ||
-                         regex.IsMatch(symbol.ToDisplayString())))
-                    {
+                    if (filter.Matches(symbol) && IsMatch(regex, symbol))
                         matches.Add((symbol, project));
-                    }
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -84,6 +78,12 @@ namespace Roslyn.Mcp.Services
 
             return matches;
         }
+
+        // Members are not matched by an owner-qualified name: "Order*" must not return every member of OrderService.
+        private static bool IsMatch(Regex regex, ISymbol symbol) =>
+            regex.IsMatch(symbol.Name) ||
+            regex.IsMatch(symbol.ToDisplayString()) ||
+            (symbol is INamedTypeSymbol && regex.IsMatch(symbol.ToDisplayString(TypeWithoutNamespaceFormat)));
 
         private static Regex CreateWildcardRegex(string pattern, bool ignoreCase)
         {
