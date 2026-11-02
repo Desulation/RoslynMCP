@@ -12,11 +12,14 @@ namespace Roslyn.Mcp.Services
     {
         private readonly ILogger<SymbolSearchService> _logger;
         private readonly WorkspaceManager _workspaceManager;
+        private readonly SymbolResolver _resolver;
 
-        public SymbolSearchService(ILogger<SymbolSearchService> logger, WorkspaceManager workspaceManager)
+        public SymbolSearchService(
+            ILogger<SymbolSearchService> logger, WorkspaceManager workspaceManager, SymbolResolver resolver)
         {
             _logger = logger;
             _workspaceManager = workspaceManager;
+            _resolver = resolver;
         }
 
         public async Task<IEnumerable<SymbolSearchResult>> SearchSymbolsAsync(
@@ -112,49 +115,8 @@ namespace Roslyn.Mcp.Services
 
         private static IEnumerable<ISymbol> GetFilteredSymbols(Compilation compilation, HashSet<SymbolKind> typeFilter)
         {
-            // Only symbols declared in source: compilation.GlobalNamespace would also walk every
-            // referenced assembly and repeat project-referenced symbols once per referencing project.
-            return GetAllSymbolsRecursive(compilation.Assembly.GlobalNamespace)
+            return SymbolResolver.EnumerateDeclaredSymbols(compilation)
                 .Where(s => typeFilter.Contains(s.Kind));
-        }
-
-        private static IEnumerable<ISymbol> GetAllSymbolsRecursive(INamespaceSymbol namespaceSymbol)
-        {
-            foreach (var member in namespaceSymbol.GetMembers())
-            {
-                yield return member;
-
-                switch (member)
-                {
-                    case INamespaceSymbol nestedNamespace:
-                        foreach (var nested in GetAllSymbolsRecursive(nestedNamespace))
-                            yield return nested;
-                        break;
-
-                    case INamedTypeSymbol namedType:
-                        foreach (var typeMember in GetTypeMembersRecursive(namedType))
-                            yield return typeMember;
-                        break;
-                }
-            }
-        }
-
-        private static IEnumerable<ISymbol> GetTypeMembersRecursive(INamedTypeSymbol type)
-        {
-            foreach (var member in type.GetMembers())
-            {
-                // Skip compiler-generated members and property/event accessors.
-                if (member.IsImplicitlyDeclared || member is IMethodSymbol { AssociatedSymbol: not null })
-                    continue;
-
-                yield return member;
-
-                if (member is INamedTypeSymbol nestedType)
-                {
-                    foreach (var nested in GetTypeMembersRecursive(nestedType))
-                        yield return nested;
-                }
-            }
         }
 
         private static SymbolSearchResult CreateSearchResult(ISymbol symbol, Project project)
@@ -233,7 +195,7 @@ namespace Roslyn.Mcp.Services
             string symbolName, string solutionPath, bool includeDefinition)
         {
             var solution = await _workspaceManager.GetSolutionAsync(solutionPath);
-            var targetSymbols = await FindSymbolsByNameAsync(solution, symbolName);
+            var targetSymbols = await _resolver.FindByNameAsync(solution, symbolName);
 
             var allReferences = new List<ReferenceResult>();
 
@@ -267,58 +229,11 @@ namespace Roslyn.Mcp.Services
                 .ThenBy(r => r.LineNumber);
         }
 
-        private static async Task<List<ISymbol>> FindSymbolsByNameAsync(Solution solution, string symbolName)
-        {
-            var symbols = new List<ISymbol>();
-
-            foreach (var project in solution.Projects.Where(p => p.SupportsCompilation))
-            {
-                var compilation = await project.GetCompilationAsync();
-                if (compilation != null)
-                {
-                    var projectSymbols = GetAllSymbolsRecursive(compilation.Assembly.GlobalNamespace)
-                        .Where(s => MatchesName(s, symbolName));
-                    symbols.AddRange(projectSymbols);
-                }
-            }
-
-            // Multi-targeted projects produce one copy of each symbol per target framework.
-            return symbols
-                .DistinctBy(s => (s.ToDisplayString(), FormatLocation(s.Locations.FirstOrDefault())))
-                .ToList();
-        }
-
-        /// <summary>
-        /// Matches a simple name ("Save") or a name qualified by its containers ("OrderService.Save",
-        /// "MyApp.Services.OrderService").
-        /// </summary>
-        private static bool MatchesName(ISymbol symbol, string symbolName)
-        {
-            if (symbol.Name.Equals(symbolName, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (!symbolName.Contains('.') || symbol.ContainingSymbol == null)
-                return false;
-
-            var qualifiedName = $"{symbol.ContainingSymbol.ToDisplayString()}.{symbol.Name}";
-            return qualifiedName.Equals(symbolName, StringComparison.OrdinalIgnoreCase) ||
-                   qualifiedName.EndsWith("." + symbolName, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string FormatLocation(Location? location)
-        {
-            if (location == null || !location.IsInSource)
-                return "";
-
-            var lineSpan = location.GetLineSpan();
-            return $"{lineSpan.Path}:{lineSpan.StartLinePosition.Line + 1}";
-        }
-
         public async Task<List<SymbolLocationResult>> FindImplementationsAsync(
             string symbolName, string solutionPath, CancellationToken cancellationToken = default)
         {
             var solution = await _workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
-            var targets = await FindSymbolsByNameAsync(solution, symbolName);
+            var targets = await _resolver.FindByNameAsync(solution, symbolName, cancellationToken);
             var results = new List<SymbolLocationResult>();
 
             foreach (var target in targets)
@@ -367,7 +282,7 @@ namespace Roslyn.Mcp.Services
             string symbolName, string solutionPath, CancellationToken cancellationToken = default)
         {
             var solution = await _workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
-            var targets = (await FindSymbolsByNameAsync(solution, symbolName))
+            var targets = (await _resolver.FindByNameAsync(solution, symbolName, cancellationToken))
                 .Where(s => s is IMethodSymbol or IPropertySymbol or IEventSymbol);
             var results = new List<SymbolLocationResult>();
 
@@ -465,7 +380,7 @@ namespace Roslyn.Mcp.Services
         public async Task<SymbolInfo?> GetSymbolInfoAsync(string symbolName, string solutionPath)
         {
             var solution = await _workspaceManager.GetSolutionAsync(solutionPath);
-            var symbols = await FindSymbolsByNameAsync(solution, symbolName);
+            var symbols = await _resolver.FindByNameAsync(solution, symbolName);
             var symbol = symbols.FirstOrDefault();
             var otherMatches = symbols.Skip(1).Select(s => s.ToDisplayString()).Take(10).ToList();
 

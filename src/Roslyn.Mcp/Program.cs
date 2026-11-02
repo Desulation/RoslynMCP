@@ -62,6 +62,7 @@ internal static class Program
         builder.Services.AddSingleton<WorkspaceOptions>();
         builder.Services.AddSingleton<WorkspaceManager>();
         builder.Services.AddSingleton<CodeAnalysisService>();
+        builder.Services.AddSingleton<SymbolResolver>();
         builder.Services.AddSingleton<SymbolSearchService>();
         builder.Services.AddSingleton<SecurityValidator>();
 
