@@ -1,5 +1,31 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
-################################################################################
+﻿# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+*.mcpb
+# Test fixture build output (also matched by the patterns above; listed so the intent is explicit)
+tests/fixtures/**/bin/
+tests/fixtures/**/obj/
 
-/.vs
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+*.swp
+
+# Test results
+TestResults/
+*.trx
+
+# NuGet
+*.nupkg
+project.lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent scratch
+.claude/worktrees/
+.superpowers/
