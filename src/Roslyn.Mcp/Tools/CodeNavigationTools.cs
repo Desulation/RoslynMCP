@@ -1,10 +1,9 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
-using Roslyn.Mcp.Models;
+using Roslyn.Mcp.Formatting;
 using Roslyn.Mcp.Services;
 using System.ComponentModel;
-using System.Text;
 
 namespace Roslyn.Mcp.Tools
 {
@@ -55,7 +54,7 @@ namespace Roslyn.Mcp.Tools
                 var results = await searchService.SearchSymbolsAsync(
                     pattern, solutionPath, filter, ignoreCase, cancellationToken);
 
-                return FormatSearchResults(results);
+                return ResultFormatter.SearchResults(results);
             });
         }
 
@@ -75,7 +74,7 @@ namespace Roslyn.Mcp.Tools
             {
                 var results = await searchService.FindReferencesAsync(
                     symbolName, solutionPath, includeDefinition, cancellationToken);
-                return FormatReferenceResults(results);
+                return ResultFormatter.References(results);
             });
         }
 
@@ -93,7 +92,7 @@ namespace Roslyn.Mcp.Tools
             return ExecuteAsync(validator, logger, solutionPath, "get symbol info", async () =>
             {
                 var info = await searchService.GetSymbolInfoAsync(symbolName, solutionPath, cancellationToken);
-                return FormatSymbolInfo(info);
+                return ResultFormatter.SymbolInfo(info);
             });
         }
 
@@ -112,7 +111,7 @@ namespace Roslyn.Mcp.Tools
             return ExecuteAsync(validator, logger, solutionPath, "find implementations", async () =>
             {
                 var results = await searchService.FindImplementationsAsync(symbolName, solutionPath, cancellationToken);
-                return FormatLocationResults(results, $"implementations of '{symbolName}'");
+                return ResultFormatter.Locations(results, $"implementations of '{symbolName}'");
             });
         }
 
@@ -131,7 +130,7 @@ namespace Roslyn.Mcp.Tools
             return ExecuteAsync(validator, logger, solutionPath, "find callers", async () =>
             {
                 var results = await searchService.FindCallersAsync(symbolName, solutionPath, cancellationToken);
-                return FormatLocationResults(results, $"callers of '{symbolName}'");
+                return ResultFormatter.Locations(results, $"callers of '{symbolName}'");
             });
         }
 
@@ -153,7 +152,7 @@ namespace Roslyn.Mcp.Tools
             return ExecuteAsync(validator, logger, solutionPath, "document outline", async () =>
             {
                 var entries = await analysisService.GetDocumentOutlineAsync(solutionPath, filePath, cancellationToken);
-                return FormatOutline(filePath, entries);
+                return ResultFormatter.Outline(filePath, entries);
             });
         }
 
@@ -182,7 +181,7 @@ namespace Roslyn.Mcp.Tools
             return ExecuteAsync(validator, logger, solutionPath, "get diagnostics", async () =>
             {
                 var diagnostics = await analysisService.GetDiagnosticsAsync(solutionPath, filePath, severity, cancellationToken);
-                return FormatDiagnostics(diagnostics, Math.Max(1, maxResults));
+                return ResultFormatter.Diagnostics(diagnostics, Math.Max(1, maxResults));
             });
         }
 
@@ -202,7 +201,7 @@ namespace Roslyn.Mcp.Tools
             return ExecuteAsync(validator, logger, solutionPath, "dependency analysis", async () =>
             {
                 var dependencies = await analysisService.AnalyzeDependenciesAsync(solutionPath, maxNamespaces, cancellationToken);
-                return FormatDependencyAnalysis(dependencies);
+                return ResultFormatter.Dependencies(dependencies);
             });
         }
 
@@ -220,7 +219,7 @@ namespace Roslyn.Mcp.Tools
             return ExecuteAsync(validator, logger, solutionPath, "complexity analysis", async () =>
             {
                 var results = await analysisService.AnalyzeComplexityAsync(solutionPath, threshold, cancellationToken);
-                return FormatComplexityResults(results);
+                return ResultFormatter.Complexity(results);
             });
         }
 
@@ -238,7 +237,7 @@ namespace Roslyn.Mcp.Tools
             return ExecuteAsync(validator, logger, solutionPath, "reload workspace", async () =>
             {
                 var summary = await workspaceManager.ReloadAsync(solutionPath, cancellationToken);
-                return FormatWorkspaceSummary(summary);
+                return ResultFormatter.WorkspaceSummary(summary);
             });
         }
 
@@ -282,230 +281,6 @@ namespace Roslyn.Mcp.Tools
                 logger.LogError(ex, "Unexpected error during {Operation}", operation);
                 return $"Error: An unexpected error occurred during the {operation} operation.";
             }
-        }
-
-        private static string FormatSearchResults(IReadOnlyList<SymbolSearchResult> results)
-        {
-            var grouped = results.GroupBy(r => r.Category);
-            var output = new StringBuilder();
-
-            output.AppendLine($"Found {results.Count} symbols:\n");
-
-            foreach (var group in grouped.OrderBy(g => g.Key))
-            {
-                output.AppendLine($"**{group.Key}** ({group.Count()}):");
-                foreach (var result in group.Take(20)) // Limit results
-                {
-                    output.AppendLine($"  • `{result.FullName}` in {result.Location}");
-                    if (!string.IsNullOrEmpty(result.Summary))
-                        output.AppendLine($"    {result.Summary}");
-                }
-                if (group.Count() > 20)
-                    output.AppendLine($"    ... and {group.Count() - 20} more");
-                output.AppendLine();
-            }
-
-            return output.ToString();
-        }
-
-        private static string FormatReferenceResults(IEnumerable<ReferenceResult> results)
-        {
-            var output = new StringBuilder();
-            output.AppendLine($"Found {results.Count()} references:\n");
-
-            var groupedByFile = results.GroupBy(r => r.DocumentPath);
-
-            foreach (var fileGroup in groupedByFile.OrderBy(g => g.Key))
-            {
-                output.AppendLine($"**{fileGroup.Key}** ({fileGroup.Count()} references):");
-
-                foreach (var reference in fileGroup.OrderBy(r => r.LineNumber))
-                {
-                    var refType = reference.IsDefinition ? "Definition" : reference.ReferenceKind;
-                    output.AppendLine($"  • Line {reference.LineNumber}: {refType}");
-                    output.AppendLine($"    `{reference.LineText.Trim()}`");
-                }
-                output.AppendLine();
-            }
-
-            return output.ToString();
-        }
-
-        private static string FormatSymbolInfo(Roslyn.Mcp.Models.SymbolInfo? info)
-        {
-            if (info == null)
-                return "Symbol not found.";
-
-            var output = new StringBuilder();
-            output.AppendLine($"**{info.Name}** ({info.Kind})");
-            output.AppendLine($"Full Name: `{info.FullName}`");
-            output.AppendLine($"Accessibility: {info.Accessibility}");
-
-            if (!string.IsNullOrEmpty(info.Namespace))
-                output.AppendLine($"Namespace: {info.Namespace}");
-
-            if (!string.IsNullOrEmpty(info.DeclaringType))
-                output.AppendLine($"Declaring Type: {info.DeclaringType}");
-
-            if (!string.IsNullOrEmpty(info.ReturnType))
-                output.AppendLine($"Return Type: {info.ReturnType}");
-
-            if (info.Parameters.Count > 0)
-            {
-                output.AppendLine("Parameters:");
-                foreach (var param in info.Parameters)
-                    output.AppendLine($"  • {param}");
-            }
-
-            if (info.Attributes.Count > 0)
-            {
-                output.AppendLine("Attributes:");
-                foreach (var attr in info.Attributes)
-                    output.AppendLine($"  • {attr}");
-            }
-
-            if (!string.IsNullOrEmpty(info.SourceLocation))
-                output.AppendLine($"Location: {info.SourceLocation}");
-
-            if (info.OtherMatches.Count > 0)
-            {
-                output.AppendLine("Other symbols with this name (qualify the name to select one):");
-                foreach (var match in info.OtherMatches)
-                    output.AppendLine($"  • `{match}`");
-            }
-
-            return output.ToString();
-        }
-
-        private static string FormatLocationResults(List<SymbolLocationResult> results, string title)
-        {
-            if (results.Count == 0)
-                return $"No {title} found.";
-
-            var output = new StringBuilder();
-            output.AppendLine($"Found {results.Count} {title}:\n");
-
-            foreach (var fileGroup in results.GroupBy(r => r.FilePath))
-            {
-                output.AppendLine($"**{fileGroup.Key}**:");
-                foreach (var result in fileGroup)
-                {
-                    output.AppendLine($"  • Line {result.LineNumber}: `{result.DisplayName}` ({result.Kind}, {result.Relation})");
-                    if (!string.IsNullOrEmpty(result.LineText))
-                        output.AppendLine($"    `{result.LineText}`");
-                }
-                output.AppendLine();
-            }
-
-            return output.ToString();
-        }
-
-        private static string FormatOutline(string filePath, List<OutlineEntry> entries)
-        {
-            if (entries.Count == 0)
-                return $"No declarations found in {filePath}.";
-
-            var output = new StringBuilder();
-            output.AppendLine($"**Outline of {filePath}**\n");
-
-            foreach (var entry in entries)
-            {
-                var indent = new string(' ', entry.Depth * 2);
-                var lines = entry.StartLine == entry.EndLine
-                    ? $"L{entry.StartLine}"
-                    : $"L{entry.StartLine}-{entry.EndLine}";
-                output.AppendLine($"{indent}- {lines} [{entry.Kind}] `{entry.Display}`");
-            }
-
-            return output.ToString();
-        }
-
-        private static string FormatDiagnostics(List<DiagnosticResult> diagnostics, int maxResults)
-        {
-            if (diagnostics.Count == 0)
-                return "No diagnostics found.";
-
-            var output = new StringBuilder();
-            var errors = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
-            var warnings = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);
-            output.AppendLine($"Found {errors} errors, {warnings} warnings, {diagnostics.Count - errors - warnings} other:\n");
-
-            foreach (var diagnostic in diagnostics.Take(maxResults))
-            {
-                var location = string.IsNullOrEmpty(diagnostic.FilePath)
-                    ? $"[{diagnostic.ProjectName}]"
-                    : $"{diagnostic.FilePath}({diagnostic.LineNumber},{diagnostic.ColumnNumber})";
-                output.AppendLine($"{location}: {diagnostic.Severity.ToString().ToLowerInvariant()} {diagnostic.Id}: {diagnostic.Message}");
-            }
-
-            if (diagnostics.Count > maxResults)
-                output.AppendLine($"\n... and {diagnostics.Count - maxResults} more (narrow with filePath or minimumSeverity)");
-
-            return output.ToString();
-        }
-
-        private static string FormatWorkspaceSummary(WorkspaceSummary summary)
-        {
-            var output = new StringBuilder();
-            output.AppendLine($"Reloaded {summary.SolutionPath}");
-            output.AppendLine($"Projects: {summary.ProjectCount}, Documents: {summary.DocumentCount}");
-            foreach (var project in summary.Projects)
-                output.AppendLine($"  • {project}");
-
-            if (summary.LoadWarnings.Count > 0)
-            {
-                output.AppendLine("\nMSBuild load warnings:");
-                foreach (var warning in summary.LoadWarnings.Take(20))
-                    output.AppendLine($"  • {warning}");
-            }
-
-            return output.ToString();
-        }
-
-        private static string FormatDependencyAnalysis(DependencyAnalysis analysis)
-        {
-            var output = new StringBuilder();
-            output.AppendLine($"**Dependency Analysis for {analysis.SolutionName}**\n");
-
-            foreach (var project in analysis.Projects)
-            {
-                var references = project.ProjectReferences.Count > 0
-                    ? string.Join(", ", project.ProjectReferences)
-                    : "none";
-                output.AppendLine($"{project.Name} — {project.TotalSymbols} symbols " +
-                                  $"({project.PublicSymbols} public, {project.InternalSymbols} internal); " +
-                                  $"references: {references}");
-            }
-
-            output.AppendLine();
-            output.AppendLine("Top namespaces:");
-            if (analysis.NamespaceUsages.Count == 0)
-                output.AppendLine("  (no using directives)");
-            foreach (var usage in analysis.NamespaceUsages)
-                output.AppendLine($"  • {usage.Namespace}: {usage.UsageCount}");
-
-            return output.ToString();
-        }
-
-        private static string FormatComplexityResults(List<ComplexityResult> results)
-        {
-            var output = new StringBuilder();
-            output.AppendLine("**Code Complexity Analysis**\n");
-            output.AppendLine($"Found {results.Count} methods with high complexity:\n");
-
-            foreach (var result in results.OrderByDescending(r => r.Complexity).Take(20))
-            {
-                output.AppendLine($"**{result.ContainingType}.{result.MemberName}** (Complexity: {result.Complexity})");
-                output.AppendLine($"  Location: {result.FilePath}:{result.LineNumber}");
-                if (!string.IsNullOrEmpty(result.Namespace))
-                    output.AppendLine($"  Namespace: {result.Namespace}");
-                output.AppendLine();
-            }
-
-            if (results.Count > 20)
-                output.AppendLine($"... and {results.Count - 20} more methods with high complexity");
-
-            return output.ToString();
         }
     }
 }
