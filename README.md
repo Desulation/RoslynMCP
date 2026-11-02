@@ -51,8 +51,8 @@ I just edited OrderService.cs. Check it for compile errors, and if it's clean ru
 
 ## Install
 
-- **Claude Desktop:** a `.mcpb` bundle for one-click install is planned; until it is published, install from source as below.
-- **Everything else (and Claude Desktop today):** build from source.
+- **Claude Desktop (and other clients that support `.mcpb` bundles):** install `roslyn-mcp-<version>.mcpb`, taken from a GitHub release's assets or built with `pwsh packaging/pack.ps1`. Double-click the file, or drag it onto Claude Desktop's Extensions settings page. The bundle runs the server with your installed `dotnet`, so the .NET 10 SDK must be on PATH. See [packaging/README.md](packaging/README.md).
+- **Everything else:** build from source.
 
 ```powershell
 git clone https://github.com/Desulation/RoslynMCP.git

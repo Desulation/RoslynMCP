@@ -1,0 +1,71 @@
+{
+  "manifest_version": "0.3",
+  "name": "roslyn-mcp",
+  "display_name": "Roslyn MCP",
+  "version": "${VERSION}",
+  "description": "Read-only C# code intelligence from the Roslyn compiler: symbols, references, implementations, callers, diagnostics and complexity.",
+  "long_description": "Roslyn MCP gives the model the C# compiler's semantic view of a codebase. Its ten `roslyn_*` tools are read-only: they search symbols, find references, implementations and callers, outline files, report compiler diagnostics without a build, and measure cyclomatic complexity. It is the companion to the .NET MCP Server (dotnet-mcp), which builds, tests and changes projects.\n\n**Prerequisite: the .NET 10 SDK must be installed and `dotnet` must be on PATH.** A .NET runtime alone is not enough: the server loads your projects with the installed SDK's MSBuild, and the bundle runs `dotnet server/roslyn-mcp.dll`.",
+  "author": {
+    "name": "Aaron Diehl",
+    "url": "https://github.com/Desulation"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Desulation/RoslynMCP"
+  },
+  "license": "MIT",
+  "keywords": ["csharp", "dotnet", "roslyn", "code-analysis"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/roslyn-mcp.dll",
+    "mcp_config": {
+      "command": "dotnet",
+      "args": ["${__dirname}/server/roslyn-mcp.dll"]
+    }
+  },
+  "tools": [
+    {
+      "name": "roslyn_search_symbols",
+      "description": "Search for symbols declared in source using wildcard patterns (* and ?). Returns file paths and line numbers."
+    },
+    {
+      "name": "roslyn_find_references",
+      "description": "Find all references to a symbol across the solution, with surrounding line text."
+    },
+    {
+      "name": "roslyn_get_symbol_info",
+      "description": "Get detailed information about a symbol: kind, signature, accessibility, attributes and declaration location."
+    },
+    {
+      "name": "roslyn_find_implementations",
+      "description": "Find implementations of an interface or interface member, classes derived from a class, and overrides of virtual/abstract members."
+    },
+    {
+      "name": "roslyn_find_callers",
+      "description": "Find the methods, properties and constructors that call a method or access a property/event (one level of the call hierarchy)."
+    },
+    {
+      "name": "roslyn_get_document_outline",
+      "description": "List the namespaces, types and members declared in a C# file with signatures and line ranges, so only the relevant lines need to be read."
+    },
+    {
+      "name": "roslyn_get_diagnostics",
+      "description": "Get C# compiler errors and warnings from the in-memory workspace without running a build."
+    },
+    {
+      "name": "roslyn_analyze_dependencies",
+      "description": "Report what Roslyn knows about the solution: per-project symbol counts (total/public/internal), project references as compiled, and the most used namespaces from using directives."
+    },
+    {
+      "name": "roslyn_analyze_code_complexity",
+      "description": "Find methods whose cyclomatic complexity is at or above a threshold."
+    },
+    {
+      "name": "roslyn_reload_workspace",
+      "description": "Discard the cached Roslyn workspace and load the solution again."
+    }
+  ],
+  "compatibility": {
+    "platforms": ["win32", "darwin", "linux"]
+  }
+}
