@@ -266,10 +266,9 @@ finds `OrderService<T>.Save`. Comparison stays `OrdinalIgnoreCase`.
 
 ### 5.7 Cyclomatic complexity
 
-Counted per *method-like* declaration: methods, constructors, operators, local
-functions, and property/indexer/event accessors with bodies. Lambdas and local
-functions nested inside count toward their enclosing declaration (as today) and are not
-reported separately. Decision points, each +1: `if`, `while`, `for`, `foreach`, `do`,
+Counted per *method-like* declaration: methods, constructors, operators, and
+property/indexer/event accessors with bodies. Lambdas and local functions nested inside
+count toward their enclosing declaration (as today) and are not reported separately. Decision points, each +1: `if`, `while`, `for`, `foreach`, `do`,
 each `case` label or `case` pattern (not `default`), `catch`, `?:`, `??`, `??=`, `&&`,
 `||`, `and`/`or` patterns, each switch-expression arm except a trailing discard `_`,
 and each `when` guard. Base complexity 1.
@@ -283,6 +282,14 @@ The first tool result after a workspace load that produced MSBuild warnings ends
 `\n(Workspace loaded with N MSBuild warnings; call roslyn_reload_workspace to see them.)`
 Subsequent results on the same cached workspace do not repeat it. `roslyn_reload_workspace`
 continues to list the warnings themselves.
+
+### 5.9 Unrestored projects are named as the cause
+
+When a diagnostics result contains more than ten `CS0246`/`CS0234` entries, the list is
+prefixed with one synthetic entry `RMCP001` (severity Error, no location):
+"Many 'type or namespace not found' errors: packages are probably not restored. Run
+dotnet_project Restore." The server instructions already promise this hint in prose;
+this puts it where the model is looking.
 
 ## 6. Tests
 
@@ -299,10 +306,10 @@ SampleSolution/
   Directory.Build.props            Nullable, ImplicitUsings, LangVersion latest — no analyzers, no warnings-as-errors
   Sample.Core/Sample.Core.csproj   classlib; TargetFrameworks net10.0;netstandard2.0 so multi-target dedupe is exercised
   Sample.Core/IsExternalInit.cs    empty shim under #if !NET so records compile for netstandard2.0
-  Sample.Core/IOrderRepository.cs  interface: Save(Order), Find(int)
+  Sample.Core/IOrderRepository.cs  interface: Store(Order), Find(int)
   Sample.Core/OrderRepository.cs   implements IOrderRepository
   Sample.Core/OrderServiceBase.cs  abstract; virtual bool Validate(Order)
-  Sample.Core/OrderService.cs      OrderService<T> : OrderServiceBase; overrides Validate; Save(T) calls repository
+  Sample.Core/OrderService.cs      OrderService<T> : OrderServiceBase; overrides Validate; Save(T) calls IOrderRepository.Store
   Sample.Core/Order.cs             record Order(int Id, decimal Total, OrderStatus Status)
   Sample.Core/OrderStatus.cs       enum
   Sample.Core/PricingRules.cs      Classify(Order): complexity exactly 9 by §5.7 rules (documented in a comment)
