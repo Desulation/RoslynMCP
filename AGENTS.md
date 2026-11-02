@@ -21,6 +21,7 @@ tests/Roslyn.Mcp.Tests/         MSTest on Microsoft.Testing.Platform (Services/,
 tests/fixtures/SampleSolution/  checked-in sample solution the tests load
 scripts/setup.ps1               builds and registers dotnet + roslyn in a client config
 docs/superpowers/specs/         design specs
+.github/workflows/              ci.yaml (build + test, Ubuntu and Windows); build-artifacts.yaml (.mcpb on v* tags)
 ```
 
 ## Commands
@@ -30,7 +31,7 @@ dotnet build Roslyn.Mcp.slnx
 dotnet test
 ```
 
-Run both from the repo root. `global.json` there selects Microsoft.Testing.Platform, so `dotnet test` from another directory falls back to VSTest mode, which the MSTest 4 test project does not support. The E2E tests start `src/Roslyn.Mcp/bin/<Configuration>/net10.0/roslyn-mcp` and are inconclusive if it is not built.
+Run both from the repo root: with no arguments, `dotnet test` tests the solution in the current directory. `global.json` selects Microsoft.Testing.Platform, which takes a solution path through `--solution`, not as a positional argument. CI (`.github/workflows/ci.yaml`) runs `dotnet build Roslyn.Mcp.slnx -c Release` and then `dotnet test --solution Roslyn.Mcp.slnx -c Release --no-build`. The E2E tests start `src/Roslyn.Mcp/bin/<Configuration>/net10.0/roslyn-mcp` and are inconclusive if it is not built.
 
 ## Conventions
 

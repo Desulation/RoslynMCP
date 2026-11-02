@@ -9,7 +9,7 @@
     3. Writes manifest.json with ${VERSION} substituted, and LICENSE, to the stage root.
     4. Checks the staged manifest: required fields, version, entry point, and that its tool
        names match the [McpServerTool(Name = ...)] attributes in the source.
-    5. Runs `npx @anthropic-ai/mcpb validate` when npx is available; otherwise skips it.
+    5. Runs `npx @anthropic-ai/mcpb@2.1.2 validate` when npx is available; otherwise skips it.
     6. Zips the stage (without *.pdb) to artifacts/roslyn-mcp-<version>.mcpb, replacing an
        existing bundle of the same version.
 
@@ -125,7 +125,8 @@ Test-StagedManifest -ManifestPath $stagedManifest -StageRoot $stage -ExpectedVer
 # 5. Schema validation
 if (Get-Command npx -ErrorAction SilentlyContinue) {
     Write-Host '4. Validating with @anthropic-ai/mcpb...'
-    & npx --yes @anthropic-ai/mcpb validate $stagedManifest
+    # Pinned so a new CLI release cannot change what the schema check accepts.
+    & npx --yes @anthropic-ai/mcpb@2.1.2 validate $stagedManifest
     if ($LASTEXITCODE -ne 0) {
         throw "mcpb validate failed with exit code $LASTEXITCODE."
     }

@@ -20,7 +20,7 @@ The script:
 2. publishes `src/Roslyn.Mcp` (Release, framework-dependent) to `artifacts/mcpb-stage/server`, without `.pdb` files;
 3. writes `manifest.json` with `${VERSION}` substituted, plus `LICENSE`, to the stage;
 4. checks the staged manifest: required fields, the version, the entry point, and that its `tools` names match the `[McpServerTool(Name = ...)]` attributes in `src/Roslyn.Mcp/Tools/CodeNavigationTools.cs`. When you add, rename or remove a tool, update `manifest.json` too;
-5. runs `npx @anthropic-ai/mcpb validate` when Node.js is installed, and skips it with a note otherwise;
+5. runs `npx @anthropic-ai/mcpb@2.1.2 validate` when Node.js is installed, and skips it with a note otherwise;
 6. zips the stage to `artifacts/roslyn-mcp-<version>.mcpb`, replacing an existing bundle of the same version.
 
 ## Install

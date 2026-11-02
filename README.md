@@ -124,7 +124,7 @@ dotnet build Roslyn.Mcp.slnx
 dotnet test                       # run from the repo root
 ```
 
-`dotnet test` must run from the repository root: `global.json` there selects Microsoft.Testing.Platform as the test runner. The end-to-end tests start the built `roslyn-mcp` over stdio, against the sample solution in `tests/fixtures/SampleSolution`.
+Run both from the repository root: with no arguments, `dotnet test` tests the solution in the current directory. `global.json` selects Microsoft.Testing.Platform as the test runner, which takes a solution path through `--solution`; CI runs `dotnet build Roslyn.Mcp.slnx -c Release` and then `dotnet test --solution Roslyn.Mcp.slnx -c Release --no-build` on Ubuntu and Windows. The end-to-end tests start the built `roslyn-mcp` over stdio, against the sample solution in `tests/fixtures/SampleSolution`.
 
 To try the tools interactively, start the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) on a Debug build:
 

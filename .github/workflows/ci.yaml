@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      # Report both platforms even when one fails.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build Roslyn.Mcp.slnx -c Release
+
+      # global.json selects Microsoft.Testing.Platform, whose `dotnet test` takes the solution
+      # through --solution rather than as a positional argument.
+      - name: Test
+        run: dotnet test --solution Roslyn.Mcp.slnx -c Release --no-build
