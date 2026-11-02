@@ -1,7 +1,10 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 
 namespace Roslyn.Mcp.Services
 {
+    [SuppressMessage("Performance", "CA1822:Mark members as static",
+        Justification = "Injected DI service; tools call its members through the instance.")]
     public class SecurityValidator
     {
         private readonly HashSet<string> _allowedExtensions = new(StringComparer.OrdinalIgnoreCase) { ".sln", ".slnx", ".csproj" };

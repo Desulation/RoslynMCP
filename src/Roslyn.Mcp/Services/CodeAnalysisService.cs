@@ -577,7 +577,6 @@ namespace Roslyn.Mcp.Services
                 {
                     Name = name,
                     Type = type,
-                    Version = string.Empty,
                 };
                 dependencies[key] = dependency;
             }

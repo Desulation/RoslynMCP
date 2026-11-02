@@ -60,7 +60,6 @@ namespace Roslyn.Mcp.Models
     public class ProjectDependency
     {
         public string Name { get; set; } = string.Empty;
-        public string Version { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty; // ProjectReference, PackageReference, etc.
         public int UsageCount { get; set; }
     }
@@ -69,7 +68,6 @@ namespace Roslyn.Mcp.Models
     {
         public string Namespace { get; set; } = string.Empty;
         public int UsageCount { get; set; }
-        public List<string> UsedTypes { get; set; } = new();
     }
 
     public class ComplexityResult
@@ -80,16 +78,6 @@ namespace Roslyn.Mcp.Models
         public int Complexity { get; set; }
         public string ClassName { get; set; } = string.Empty;
         public string Namespace { get; set; } = string.Empty;
-    }
-
-    public class AnalysisResult
-    {
-        public int ProcessedDocuments { get; set; }
-        public List<SymbolSearchResult> Symbols { get; set; } = new();
-        public List<ComplexityResult> ComplexityIssues { get; set; } = new();
-        public DateTime AnalysisStartTime { get; set; }
-        public DateTime AnalysisEndTime { get; set; }
-        public TimeSpan Duration => AnalysisEndTime - AnalysisStartTime;
     }
 
     public class SymbolLocationResult

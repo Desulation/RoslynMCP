@@ -1,6 +1,5 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Roslyn.Mcp.Models;
 using System.Text.RegularExpressions;
@@ -13,14 +12,12 @@ namespace Roslyn.Mcp.Services
     {
         private readonly CodeAnalysisService _codeAnalysis;
         private readonly ILogger<SymbolSearchService> _logger;
-        private readonly IMemoryCache _cache;
 
         public SymbolSearchService(CodeAnalysisService codeAnalysis,
-            ILogger<SymbolSearchService> logger, IMemoryCache cache)
+            ILogger<SymbolSearchService> logger)
         {
             _codeAnalysis = codeAnalysis;
             _logger = logger;
-            _cache = cache;
         }
 
         public async Task<IEnumerable<SymbolSearchResult>> SearchSymbolsAsync(
