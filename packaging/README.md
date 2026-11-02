@@ -28,4 +28,6 @@ The script:
 - **Claude Desktop:** double-click the `.mcpb` file, or drag it onto Claude Desktop's Extensions settings page, then confirm the install.
 - **Other clients:** follow the client's instructions for installing an `.mcpb` file. Clients without `.mcpb` support can run the server from source; see the main [README](../README.md#install).
 
+If the extension fails to start on macOS, `dotnet` is probably not on Claude Desktop's PATH: apps opened from the Dock or Finder do not read your shell profile, so a `dotnet` installed into `~/.dotnet` is not found. Check the MCP logs under `~/Library/Logs/Claude/` for `spawn dotnet ENOENT` and run `which dotnet` in Terminal; the fix is in the main README's [Troubleshooting](../README.md#troubleshooting) section.
+
 Install dotnet-mcp alongside it (see the main README's Configure section) so the model can build and test as well as read code.

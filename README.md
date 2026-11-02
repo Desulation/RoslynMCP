@@ -1,7 +1,7 @@
 # Roslyn MCP Server
 
 Roslyn MCP is a read-only MCP (Model Context Protocol) server that gives a model the C# compiler's semantic view of a codebase: symbols, references, implementations, callers, compiler diagnostics and complexity, answered by Roslyn over stdio.
-It is built as the companion to the [.NET MCP Server (dotnet-mcp)](https://github.com/jongalloway/dotnet-mcp), which drives the .NET SDK, and works with Claude Desktop, Claude Code, VS Code, Visual Studio, LM Studio and any other MCP client.
+It is built as the companion to the [.NET MCP Server (dotnet-mcp)](https://github.com/jongalloway/dotnet-mcp), which drives the .NET SDK, and works with any MCP client that launches stdio servers, such as Claude Desktop, Claude Code, VS Code and Visual Studio.
 
 ## How this expands on dotnet-mcp
 
@@ -83,7 +83,7 @@ Register both servers in your client:
 }
 ```
 
-- Claude Desktop reads `%APPDATA%\Claude\claude_desktop_config.json` on Windows and `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS. Claude Code and LM Studio accept the same `mcpServers` shape.
+- Claude Desktop reads `%APPDATA%\Claude\claude_desktop_config.json` on Windows and `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS. Claude Code's `.mcp.json` uses the same `mcpServers` shape. For other MCP clients that launch stdio servers, check the client's documentation for its config file and key.
 - VS Code and Visual Studio use a top-level `servers` key instead of `mcpServers`; the two entries are the same.
 - On macOS and Linux, point `command` at `.../net10.0/roslyn-mcp` (no `.exe`).
 - The server needs no arguments. `--stdio` is accepted and ignored, so older configs that pass it keep working.
@@ -96,7 +96,7 @@ Register both servers in your client:
 | `roslyn_find_references` | Every reference to a symbol, with the line text; `includeDefinition` adds the declaration sites |
 | `roslyn_get_symbol_info` | Kind, signature, accessibility, attributes and declaration location |
 | `roslyn_find_implementations` | Implementations of an interface/member, derived classes, overrides |
-| `roslyn_find_callers` | Methods/properties that call a method (one level of the call hierarchy) |
+| `roslyn_find_callers` | The methods, properties and constructors that call a method or access a property or event (one level of the call hierarchy) |
 | `roslyn_get_document_outline` | Types and members in a `.cs` file with signatures and line ranges |
 | `roslyn_get_diagnostics` | Compiler errors/warnings from the in-memory workspace, no build needed |
 | `roslyn_analyze_dependencies` | Per-project symbol counts, the project-reference graph as compiled, and the most used namespaces (`maxNamespaces`, default 20); for NuGet packages use `dotnet_package List` |
@@ -116,6 +116,7 @@ Symbol names can be simple (`Save`) or qualified to disambiguate (`OrderService.
 - **"Workspace loaded with N MSBuild warnings".** The first result after a load ends with this note once. Call `roslyn_reload_workspace` to see the warnings; they usually name a missing SDK, workload or project file.
 - **"Multiple solution files found" / "Multiple project files found".** `solutionPath` is a directory with more than one `.sln`/`.slnx` (or, without a solution, more than one `.csproj`). Pass the file you want.
 - **"Failed to register MSBuild" on startup.** No .NET 10 SDK was found. Install it; a runtime alone is not enough.
+- **The `.mcpb` extension fails to start on macOS.** The bundle starts `dotnet` by name, and Claude Desktop, like other apps opened from the Dock or Finder, does not read your shell profile. A `dotnet` that only your shell's PATH finds (for example one installed into `~/.dotnet` by `dotnet-install.sh`) is therefore not found. Look in the MCP logs under `~/Library/Logs/Claude/` for an error such as `spawn dotnet ENOENT`, and run `which dotnet` in Terminal to see where yours lives. Install the .NET 10 SDK with Microsoft's macOS installer package, which puts it in `/usr/local/share/dotnet`, and restart Claude Desktop. If `dotnet` is still not found, register the built server in `claude_desktop_config.json` by absolute path instead (see [Configure](#configure)), adding `"env": { "DOTNET_ROOT": "/path/to/folder/containing/dotnet" }` when the SDK is not in the default location.
 
 ## Development
 

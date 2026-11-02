@@ -401,7 +401,8 @@ skips with a note.
 
 `ci.yaml`: on push to main, pull_request, workflow_dispatch; matrix `ubuntu-latest`,
 `windows-latest`; `actions/setup-dotnet` with `global-json-file`; `dotnet build Roslyn.Mcp.slnx -c Release`;
-`dotnet test Roslyn.Mcp.slnx -c Release --no-build`. There is no version-consistency
+`dotnet test --solution Roslyn.Mcp.slnx -c Release --no-build` (Microsoft.Testing.Platform takes the
+solution through `--solution`, not positionally; ruling R14). There is no version-consistency
 job: `Directory.Build.props` is the only place a version is written, `pack.ps1`
 substitutes it into the manifest, and the E2E test asserts `--version` prints it.
 
@@ -434,7 +435,7 @@ substitutes it into the manifest, and the E2E test asserts `--version` prints it
 ## 9. Acceptance
 
 - `dotnet build Roslyn.Mcp.slnx -c Release` succeeds with zero warnings.
-- `dotnet test Roslyn.Mcp.slnx -c Release --no-build` passes on Windows and Linux.
+- `dotnet test --solution Roslyn.Mcp.slnx -c Release --no-build` passes on Windows and Linux.
 - `npx @modelcontextprotocol/inspector roslyn-mcp.exe` lists ten `roslyn_` tools.
 - `pack.ps1` produces a bundle that `mcpb validate` accepts.
 - Running `roslyn_find_references` with `includeDefinition = true` on `OrderService`
