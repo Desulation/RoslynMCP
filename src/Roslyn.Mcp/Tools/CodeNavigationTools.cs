@@ -34,17 +34,28 @@ namespace Roslyn.Mcp.Tools
             ILogger<CodeNavigationTools> logger,
             [Description("Wildcard pattern to search for (e.g., 'User*', '*Service', 'Get*User')")] string pattern,
             [Description(SolutionPathDescription)] string solutionPath,
-            [Description("Symbol types to include: class,interface,struct,enum,method,property,field,event (comma-separated)")] string symbolTypes = "class,interface,method,property",
-            [Description("Whether to ignore case in search")] bool ignoreCase = true)
+            [Description("Comma-separated symbol kinds: class, interface, struct, enum, record, delegate, method, property, field, event, namespace")] string symbolTypes = "class,interface,method,property",
+            [Description("Whether to ignore case in search")] bool ignoreCase = true,
+            CancellationToken cancellationToken = default)
         {
             var patternError = validator.ValidateSearchPattern(pattern);
             if (patternError != null)
                 return Task.FromResult("Error: " + patternError);
 
+            SymbolTypeFilter filter;
+            try
+            {
+                filter = SymbolTypeFilter.Parse(symbolTypes);
+            }
+            catch (ArgumentException ex)
+            {
+                return Task.FromResult("Error: " + ex.Message);
+            }
+
             return ExecuteAsync(validator, logger, solutionPath, "symbol search", async () =>
             {
                 var results = await searchService.SearchSymbolsAsync(
-                    pattern, solutionPath, symbolTypes, ignoreCase);
+                    pattern, solutionPath, filter, ignoreCase, cancellationToken);
 
                 return FormatSearchResults(results);
             });
@@ -308,12 +319,12 @@ namespace Roslyn.Mcp.Tools
             }
         }
 
-        private static string FormatSearchResults(IEnumerable<SymbolSearchResult> results)
+        private static string FormatSearchResults(IReadOnlyList<SymbolSearchResult> results)
         {
             var grouped = results.GroupBy(r => r.Category);
             var output = new StringBuilder();
 
-            output.AppendLine($"Found {results.Count()} symbols:\n");
+            output.AppendLine($"Found {results.Count} symbols:\n");
 
             foreach (var group in grouped.OrderBy(g => g.Key))
             {

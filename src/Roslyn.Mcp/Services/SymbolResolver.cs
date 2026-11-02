@@ -42,11 +42,15 @@ namespace Roslyn.Mcp.Services
                     symbols.AddRange(EnumerateDeclaredSymbols(compilation).Where(s => MatchesName(s, symbolName)));
             }
 
-            // Multi-targeted projects produce one copy of each symbol per target framework.
-            return symbols
-                .DistinctBy(s => (s.ToDisplayString(), FormatLocation(s.Locations.FirstOrDefault())))
-                .ToList();
+            return symbols.DistinctBy(DeclarationKey).ToList();
         }
+
+        /// <summary>
+        /// Identifies a declaration independently of the compilation it came from: multi-targeted
+        /// projects produce one copy of each symbol per target framework, and those copies share this key.
+        /// </summary>
+        public static (string DisplayString, string Location) DeclarationKey(ISymbol symbol) =>
+            (symbol.ToDisplayString(), FormatLocation(symbol.Locations.FirstOrDefault()));
 
         /// <summary>
         /// Matches a simple name ("Save") or a name qualified by its containers ("OrderService.Save",

@@ -22,57 +22,67 @@ namespace Roslyn.Mcp.Services
             _resolver = resolver;
         }
 
-        public async Task<IEnumerable<SymbolSearchResult>> SearchSymbolsAsync(
-            string pattern, string solutionPath, string symbolTypes, bool ignoreCase)
+        // "OrderService<T>" for a type and "OrderService<T>.Save" for a member, so a pattern such as
+        // "OrderService<*>" matches without spelling out the namespace.
+        private static readonly SymbolDisplayFormat TypeQualifiedFormat = new(
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypes,
+            genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+            memberOptions: SymbolDisplayMemberOptions.IncludeContainingType);
+
+        /// <summary>
+        /// Finds source-declared symbols whose name, type-qualified name or full display string matches the
+        /// wildcard <paramref name="pattern"/> (<c>*</c> and <c>?</c>), most relevant first, one result per
+        /// declaration even when a project has several target frameworks.
+        /// </summary>
+        public async Task<IReadOnlyList<SymbolSearchResult>> SearchSymbolsAsync(
+            string pattern, string solutionPath, SymbolTypeFilter filter, bool ignoreCase, CancellationToken cancellationToken)
         {
-            var solution = await _workspaceManager.GetSolutionAsync(solutionPath);
-            var typeFilter = ParseSymbolTypes(symbolTypes);
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
             var regex = CreateWildcardRegex(pattern, ignoreCase);
 
-            var results = new List<SymbolSearchResult>();
-
-            // Search across all projects in parallel
-            var searchTasks = solution.Projects
+            var perProject = await Task.WhenAll(solution.Projects
                 .Where(p => p.SupportsCompilation)
-                .Select(project => SearchProjectSymbolsAsync(project, regex, typeFilter));
+                .Select(project => SearchProjectAsync(project, regex, filter, cancellationToken)));
 
-            var projectResults = await Task.WhenAll(searchTasks);
-
-            foreach (var projectResult in projectResults)
-                results.AddRange(projectResult);
-
-            // Sort by relevance score
-            return results
+            return perProject
+                .SelectMany(matches => matches)
+                .DistinctBy(match => SymbolResolver.DeclarationKey(match.Symbol))
+                .Select(match => CreateSearchResult(match.Symbol, match.Project))
                 .OrderByDescending(r => CalculateRelevanceScore(r, pattern))
-                .ThenBy(r => r.Name);
+                .ThenBy(r => r.Name)
+                .ToList();
         }
 
-        private async Task<IEnumerable<SymbolSearchResult>> SearchProjectSymbolsAsync(
-            Project project, Regex pattern, HashSet<SymbolKind> typeFilter)
+        private async Task<List<(ISymbol Symbol, Project Project)>> SearchProjectAsync(
+            Project project, Regex regex, SymbolTypeFilter filter, CancellationToken cancellationToken)
         {
-            var results = new List<SymbolSearchResult>();
+            var matches = new List<(ISymbol Symbol, Project Project)>();
 
             try
             {
-                var compilation = await project.GetCompilationAsync();
-                if (compilation == null) return results;
+                var compilation = await project.GetCompilationAsync(cancellationToken);
+                if (compilation == null) return matches;
 
-                var symbols = GetFilteredSymbols(compilation, typeFilter);
-
-                foreach (var symbol in symbols)
+                foreach (var symbol in SymbolResolver.EnumerateDeclaredSymbols(compilation))
                 {
-                    if (pattern.IsMatch(symbol.Name) || pattern.IsMatch(symbol.ToDisplayString()))
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (filter.Matches(symbol) &&
+                        (regex.IsMatch(symbol.Name) ||
+                         regex.IsMatch(symbol.ToDisplayString(TypeQualifiedFormat)) ||
+                         regex.IsMatch(symbol.ToDisplayString())))
                     {
-                        results.Add(CreateSearchResult(symbol, project));
+                        matches.Add((symbol, project));
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // One project that fails to compile should not hide the matches in the others.
                 _logger.LogError(ex, "Error searching project: {ProjectName}", project.Name);
             }
 
-            return results;
+            return matches;
         }
 
         private static Regex CreateWildcardRegex(string pattern, bool ignoreCase)
@@ -86,37 +96,6 @@ namespace Roslyn.Mcp.Services
             if (ignoreCase) options |= RegexOptions.IgnoreCase;
 
             return new Regex($"^{regexPattern}$", options);
-        }
-
-        private static HashSet<SymbolKind> ParseSymbolTypes(string symbolTypes)
-        {
-            var types = new HashSet<SymbolKind>();
-
-            foreach (var type in symbolTypes.Split(',', StringSplitOptions.RemoveEmptyEntries))
-            {
-                switch (type.Trim().ToLower())
-                {
-                    case "class":
-                    case "interface":
-                    case "struct":
-                    case "enum":
-                        types.Add(SymbolKind.NamedType);
-                        break;
-                    case "method": types.Add(SymbolKind.Method); break;
-                    case "property": types.Add(SymbolKind.Property); break;
-                    case "field": types.Add(SymbolKind.Field); break;
-                    case "event": types.Add(SymbolKind.Event); break;
-                    case "namespace": types.Add(SymbolKind.Namespace); break;
-                }
-            }
-
-            return types;
-        }
-
-        private static IEnumerable<ISymbol> GetFilteredSymbols(Compilation compilation, HashSet<SymbolKind> typeFilter)
-        {
-            return SymbolResolver.EnumerateDeclaredSymbols(compilation)
-                .Where(s => typeFilter.Contains(s.Kind));
         }
 
         private static SymbolSearchResult CreateSearchResult(ISymbol symbol, Project project)
