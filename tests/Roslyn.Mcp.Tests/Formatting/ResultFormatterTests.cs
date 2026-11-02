@@ -292,6 +292,25 @@ public sealed class ResultFormatterTests
     }
 
     [TestMethod]
+    public void WorkspaceSummary_MoreThan20Warnings_CappedWithMoreLine()
+    {
+        var summary = new WorkspaceSummary
+        {
+            SolutionPath = "C:/src/Sample.slnx",
+            ProjectCount = 1,
+            DocumentCount = 1,
+            Projects = ["Sample.Core"],
+            LoadWarnings = Enumerable.Range(1, 23).Select(i => $"warning {i}").ToList(),
+        };
+
+        var lines = Lines(ResultFormatter.WorkspaceSummary(summary));
+
+        Assert.AreEqual(20, lines.Count(l => l.StartsWith("  • warning ", StringComparison.Ordinal)));
+        Assert.AreEqual("  • warning 20", lines.Last(l => l.StartsWith("  • warning ", StringComparison.Ordinal)));
+        Assert.AreEqual("... and 3 more MSBuild load warnings", lines[^2]);
+    }
+
+    [TestMethod]
     public void Dependencies_PrintsProjectsThenNamespaces()
     {
         var analysis = new DependencyAnalysis

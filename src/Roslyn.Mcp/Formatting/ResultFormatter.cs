@@ -183,6 +183,9 @@ namespace Roslyn.Mcp.Formatting
                 output.AppendLine("\nMSBuild load warnings:");
                 foreach (var warning in summary.LoadWarnings.Take(20))
                     output.AppendLine($"  • {warning}");
+
+                if (summary.LoadWarnings.Count > 20)
+                    output.AppendLine($"... and {summary.LoadWarnings.Count - 20} more MSBuild load warnings");
             }
 
             return output.ToString();

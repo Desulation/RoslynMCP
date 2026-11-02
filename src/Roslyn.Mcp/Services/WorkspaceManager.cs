@@ -285,7 +285,7 @@ namespace Roslyn.Mcp.Services
                     foreach (var documentId in documentIds)
                         solution = solution.WithDocumentText(documentId, text, PreservationMode.PreserveIdentity);
                 }
-                catch (IOException ex)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     // The file is probably still being written; pick it up on the next request.
                     _logger.LogDebug(ex, "Could not read changed file {File}", file);
