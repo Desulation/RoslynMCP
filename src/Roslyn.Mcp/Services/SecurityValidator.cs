@@ -1,9 +1,9 @@
-using System.Text.RegularExpressions;
-
 namespace Roslyn.Mcp.Services
 {
     public class SecurityValidator
     {
+        private const int MaxSearchPatternLength = 256;
+
         private readonly HashSet<string> _allowedExtensions = new(StringComparer.OrdinalIgnoreCase) { ".sln", ".slnx", ".csproj" };
 
         /// <summary>
@@ -61,13 +61,19 @@ namespace Roslyn.Mcp.Services
             return Path.IsPathFullyQualified(path);
         }
 
-        public string SanitizeSearchPattern(string pattern)
+        /// <summary>
+        /// Returns an error message when the search pattern is unusable, otherwise null.
+        /// The pattern itself is not altered: the search only ever Regex.Escapes it.
+        /// </summary>
+        public string? ValidateSearchPattern(string pattern)
         {
             if (string.IsNullOrWhiteSpace(pattern))
-                return "*";
+                return "Search pattern must not be empty.";
 
-            // Remove potentially dangerous characters
-            return Regex.Replace(pattern, @"[^\w*?.]", "");
+            if (pattern.Length > MaxSearchPatternLength)
+                return $"Search pattern must be {MaxSearchPatternLength} characters or fewer.";
+
+            return null;
         }
     }
 }

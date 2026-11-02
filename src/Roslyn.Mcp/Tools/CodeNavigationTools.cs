@@ -37,11 +37,14 @@ namespace Roslyn.Mcp.Tools
             [Description("Symbol types to include: class,interface,struct,enum,method,property,field,event (comma-separated)")] string symbolTypes = "class,interface,method,property",
             [Description("Whether to ignore case in search")] bool ignoreCase = true)
         {
+            var patternError = validator.ValidateSearchPattern(pattern);
+            if (patternError != null)
+                return Task.FromResult("Error: " + patternError);
+
             return ExecuteAsync(validator, logger, solutionPath, "symbol search", async () =>
             {
-                var sanitizedPattern = validator.SanitizeSearchPattern(pattern);
                 var results = await searchService.SearchSymbolsAsync(
-                    sanitizedPattern, solutionPath, symbolTypes, ignoreCase);
+                    pattern, solutionPath, symbolTypes, ignoreCase);
 
                 return FormatSearchResults(results);
             });
