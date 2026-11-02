@@ -72,12 +72,12 @@ namespace Roslyn.Mcp.Models
 
     public class ComplexityResult
     {
-        public string MethodName { get; set; } = string.Empty;
-        public string FileName { get; set; } = string.Empty;
+        public string MemberName { get; set; } = string.Empty;
+        public string ContainingType { get; set; } = string.Empty;
+        public string Namespace { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
         public int LineNumber { get; set; }
         public int Complexity { get; set; }
-        public string ClassName { get; set; } = string.Empty;
-        public string Namespace { get; set; } = string.Empty;
     }
 
     public class SymbolLocationResult

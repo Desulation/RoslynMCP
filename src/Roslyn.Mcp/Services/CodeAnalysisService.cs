@@ -253,6 +253,61 @@ namespace Roslyn.Mcp.Services
             return analysis;
         }
 
+        private static readonly SymbolDisplayFormat ComplexityMemberFormat = new(
+            memberOptions: SymbolDisplayMemberOptions.IncludeParameters,
+            parameterOptions: SymbolDisplayParameterOptions.IncludeType,
+            miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
+        public async Task<List<ComplexityResult>> AnalyzeComplexityAsync(
+            string solutionPath,
+            int threshold,
+            CancellationToken cancellationToken = default
+        )
+        {
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
+            var results = new List<ComplexityResult>();
+
+            foreach (var project in solution.Projects.Where(project => project.SupportsCompilation))
+            {
+                foreach (var document in project.Documents)
+                {
+                    var root = await document.GetSyntaxRootAsync(cancellationToken);
+                    var model = await document.GetSemanticModelAsync(cancellationToken);
+                    if (root == null || model == null)
+                        continue;
+
+                    foreach (var member in root.DescendantNodes().Where(ComplexityCalculator.IsMemberLike))
+                    {
+                        var complexity = ComplexityCalculator.Calculate(member);
+                        if (complexity < threshold)
+                            continue;
+
+                        var symbol = model.GetDeclaredSymbol(member, cancellationToken);
+                        var containingNamespace = symbol?.ContainingNamespace;
+                        results.Add(new ComplexityResult
+                        {
+                            MemberName = symbol?.ToDisplayString(ComplexityMemberFormat) ?? string.Empty,
+                            ContainingType = symbol?.ContainingType?.Name ?? string.Empty,
+                            Namespace = containingNamespace == null || containingNamespace.IsGlobalNamespace
+                                ? string.Empty
+                                : containingNamespace.ToDisplayString(),
+                            FilePath = document.FilePath ?? member.SyntaxTree.FilePath,
+                            LineNumber = member.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
+                            Complexity = complexity,
+                        });
+                    }
+                }
+            }
+
+            // Multi-targeted projects contain the same documents once per target framework.
+            return results
+                .DistinctBy(r => (r.FilePath, r.LineNumber))
+                .OrderByDescending(r => r.Complexity)
+                .ThenBy(r => r.FilePath, StringComparer.Ordinal)
+                .ThenBy(r => r.LineNumber)
+                .ToList();
+        }
+
         private static IEnumerable<ISymbol> GetSymbols(INamespaceOrTypeSymbol container)
         {
             foreach (var member in container.GetMembers())

@@ -1,6 +1,4 @@
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using Roslyn.Mcp.Models;
@@ -212,7 +210,7 @@ namespace Roslyn.Mcp.Tools
         [Description("Find methods whose cyclomatic complexity is at or above a threshold.")]
         public static Task<string> AnalyzeCodeComplexity(
             SecurityValidator validator,
-            WorkspaceManager workspaceManager,
+            CodeAnalysisService analysisService,
             ILogger<CodeNavigationTools> logger,
             [Description(SolutionPathDescription)] string solutionPath,
             [Description("Complexity threshold (1-10)")] int threshold = 5,
@@ -220,45 +218,8 @@ namespace Roslyn.Mcp.Tools
         {
             return ExecuteAsync(validator, logger, solutionPath, "complexity analysis", async () =>
             {
-                var solution = await workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
-                var complexityResults = new List<ComplexityResult>();
-
-                foreach (var project in solution.Projects.Where(p => p.SupportsCompilation))
-                {
-                    var compilation = await project.GetCompilationAsync(cancellationToken);
-                    if (compilation == null) continue;
-
-                    foreach (var tree in compilation.SyntaxTrees)
-                    {
-                        var root = await tree.GetRootAsync(cancellationToken);
-                        var methods = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
-
-                        foreach (var method in methods)
-                        {
-                            var complexity = CalculateCyclomaticComplexity(method);
-                            if (complexity >= threshold)
-                            {
-                                var lineSpan = method.GetLocation().GetLineSpan();
-                                complexityResults.Add(new ComplexityResult
-                                {
-                                    MethodName = method.Identifier.ValueText,
-                                    FileName = tree.FilePath,
-                                    LineNumber = lineSpan.StartLinePosition.Line + 1,
-                                    Complexity = complexity,
-                                    ClassName = GetContainingClassName(method),
-                                    Namespace = GetContainingNamespace(method)
-                                });
-                            }
-                        }
-                    }
-                }
-
-                // Multi-targeted projects contain the same syntax trees once per target framework.
-                var distinct = complexityResults
-                    .DistinctBy(r => (r.FileName, r.LineNumber))
-                    .ToList();
-
-                return FormatComplexityResults(distinct);
+                var results = await analysisService.AnalyzeComplexityAsync(solutionPath, threshold, cancellationToken);
+                return FormatComplexityResults(results);
             });
         }
 
@@ -544,8 +505,8 @@ namespace Roslyn.Mcp.Tools
 
             foreach (var result in results.OrderByDescending(r => r.Complexity).Take(20))
             {
-                output.AppendLine($"**{result.ClassName}.{result.MethodName}** (Complexity: {result.Complexity})");
-                output.AppendLine($"  Location: {result.FileName}:{result.LineNumber}");
+                output.AppendLine($"**{result.ContainingType}.{result.MemberName}** (Complexity: {result.Complexity})");
+                output.AppendLine($"  Location: {result.FilePath}:{result.LineNumber}");
                 if (!string.IsNullOrEmpty(result.Namespace))
                     output.AppendLine($"  Namespace: {result.Namespace}");
                 output.AppendLine();
@@ -555,42 +516,6 @@ namespace Roslyn.Mcp.Tools
                 output.AppendLine($"... and {results.Count - 20} more methods with high complexity");
 
             return output.ToString();
-        }
-
-        private static int CalculateCyclomaticComplexity(MethodDeclarationSyntax method)
-        {
-            int complexity = 1; // Base complexity
-
-            var decisionPoints = method.DescendantNodes().Where(node =>
-                node.IsKind(SyntaxKind.IfStatement) ||
-                node.IsKind(SyntaxKind.WhileStatement) ||
-                node.IsKind(SyntaxKind.ForStatement) ||
-                node.IsKind(SyntaxKind.ForEachStatement) ||
-                node.IsKind(SyntaxKind.SwitchStatement) ||
-                node.IsKind(SyntaxKind.CatchClause));
-
-            complexity += decisionPoints.Count();
-
-            // Add complexity for logical operators
-            var logicalOperators = method.DescendantTokens().Where(token =>
-                token.IsKind(SyntaxKind.AmpersandAmpersandToken) ||
-                token.IsKind(SyntaxKind.BarBarToken));
-
-            complexity += logicalOperators.Count();
-
-            return complexity;
-        }
-
-        private static string GetContainingClassName(MethodDeclarationSyntax method)
-        {
-            var classDeclaration = method.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault();
-            return classDeclaration?.Identifier.ValueText ?? "";
-        }
-
-        private static string GetContainingNamespace(MethodDeclarationSyntax method)
-        {
-            var namespaceDeclaration = method.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault();
-            return namespaceDeclaration?.Name.ToString() ?? "";
         }
     }
 }
