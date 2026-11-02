@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging.Abstractions;
 using Roslyn.Mcp.Models;
 using Roslyn.Mcp.Services;
@@ -128,5 +129,142 @@ public sealed class CodeAnalysisServiceTests
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
         CollectionAssert.AreEqual(new[] { "NamespaceUsages", "Projects" }, listProperties);
+    }
+
+    [TestMethod]
+    public async Task GetDiagnosticsAsync_WholeSolution_FindsCS0219AtLine7()
+    {
+        var results = await s_service.GetDiagnosticsAsync(
+            TestPaths.SampleSolutionPath, null, DiagnosticSeverity.Hidden, CancellationToken.None);
+
+        // Sample.Core compiles for two target frameworks; the warning is still reported once.
+        var unused = Assert.ContainsSingle(results.Where(d => d.Id == "CS0219"));
+        Assert.AreEqual(7, unused.LineNumber);
+        Assert.AreEqual(13, unused.ColumnNumber);
+        Assert.EndsWith("Scratch.cs", unused.FilePath);
+    }
+
+    [TestMethod]
+    public async Task GetDiagnosticsAsync_ErrorOnly_HidesWarning()
+    {
+        var results = await s_service.GetDiagnosticsAsync(
+            TestPaths.SampleSolutionPath, null, DiagnosticSeverity.Error, CancellationToken.None);
+
+        Assert.IsFalse(results.Any(d => d.Id == "CS0219"));
+        Assert.IsTrue(results.All(d => d.Severity == DiagnosticSeverity.Error));
+    }
+
+    [TestMethod]
+    public async Task GetDiagnosticsAsync_FilePath_ScopesToFile()
+    {
+        var results = await s_service.GetDiagnosticsAsync(
+            TestPaths.SampleSolutionPath, TestPaths.CoreFile("Order.cs"), DiagnosticSeverity.Hidden, CancellationToken.None);
+
+        Assert.IsFalse(results.Any(d => d.Id == "CS0219"));
+        Assert.IsTrue(results.All(d => d.FilePath.EndsWith("Order.cs", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [TestMethod]
+    public async Task GetDiagnosticsAsync_FileNotInSolution_Throws()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"roslyn-mcp-tests-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(path, "public static class Outside { }\n");
+        try
+        {
+            var ex = await Assert.ThrowsExactlyAsync<ArgumentException>(() => s_service.GetDiagnosticsAsync(
+                TestPaths.SampleSolutionPath, path, DiagnosticSeverity.Hidden, CancellationToken.None));
+
+            StringAssert.Contains(ex.Message, path);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task GetDiagnosticsAsync_UnrestoredProject_ReportsRestoreHint()
+    {
+        using var copy = FixtureCopy.Create();
+        var appProject = copy.AppFile("Sample.App.csproj");
+        const string coreReference = "<ProjectReference Include=\"../Sample.Core/Sample.Core.csproj\" />";
+        var projectXml = File.ReadAllText(appProject);
+        Assert.Contains(coreReference, projectXml);
+        File.WriteAllText(
+            appProject,
+            projectXml.Replace(
+                coreReference,
+                coreReference + "\n    <PackageReference Include=\"Newtonsoft.Json\" Version=\"13.0.3\" />",
+                StringComparison.Ordinal));
+        // Twelve type-position uses (CS0246 each); the copy is deliberately not restored again.
+        var fields = Enumerable.Range(1, 12)
+            .Select(i => $"    public static JsonSerializerSettings Settings{i:D2} = null!;");
+        File.WriteAllText(
+            copy.AppFile("Json.cs"),
+            "using Newtonsoft.Json;\n\nnamespace Sample.App;\n\npublic static class Json\n{\n" +
+            string.Join("\n", fields) + "\n}\n");
+        using var manager = new WorkspaceManager(NullLogger<WorkspaceManager>.Instance, new WorkspaceOptions());
+        var service = new CodeAnalysisService(NullLogger<CodeAnalysisService>.Instance, manager);
+
+        var results = await service.GetDiagnosticsAsync(
+            copy.SolutionPath, null, DiagnosticSeverity.Hidden, CancellationToken.None);
+
+        Assert.IsGreaterThan(10, results.Count(d => d.Id == "CS0246"));
+        var hint = results[0];
+        Assert.AreEqual("RMCP001", hint.Id);
+        Assert.AreEqual(DiagnosticSeverity.Error, hint.Severity);
+        Assert.AreEqual(
+            "Many 'type or namespace not found' errors: packages are probably not restored. Run dotnet_project Restore.",
+            hint.Message);
+        Assert.AreEqual("Sample.App", hint.ProjectName);
+        Assert.AreEqual(string.Empty, hint.FilePath);
+        Assert.AreEqual(1, results.Count(d => d.Id == "RMCP001"));
+    }
+
+    [TestMethod]
+    public async Task GetDocumentOutlineAsync_OrderService_KindsAndDepths()
+    {
+        var path = TestPaths.CoreFile("OrderService.cs");
+
+        var outline = await s_service.GetDocumentOutlineAsync(TestPaths.SampleSolutionPath, path, CancellationToken.None);
+
+        Assert.HasCount(7, outline);
+        AssertEntry(outline[0], 0, "Namespace", "Sample.Core");
+        AssertEntry(outline[1], 1, "Class", "OrderService<T>");
+        AssertEntry(outline[2], 2, "Field", "_repository");
+        AssertEntry(outline[3], 2, "Method", "OrderService(");
+        AssertEntry(outline[4], 2, "Property", "SavedCount");
+        AssertEntry(outline[5], 2, "Method", "Validate");
+        AssertEntry(outline[6], 2, "Method", "Save");
+        foreach (var entry in outline)
+            Assert.IsLessThanOrEqualTo(entry.EndLine, entry.StartLine, entry.Display);
+        var lines = File.ReadAllLines(path);
+        var lastCodeLine = Array.FindLastIndex(lines, line => !string.IsNullOrWhiteSpace(line)) + 1;
+        Assert.AreEqual(lastCodeLine, outline[1].EndLine);
+    }
+
+    [TestMethod]
+    public async Task GetDocumentOutlineAsync_FileNotInSolution_Throws()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"roslyn-mcp-tests-{Guid.NewGuid():N}.cs");
+        File.WriteAllText(path, "public static class Outside { }\n");
+        try
+        {
+            var ex = await Assert.ThrowsExactlyAsync<ArgumentException>(() => s_service.GetDocumentOutlineAsync(
+                TestPaths.SampleSolutionPath, path, CancellationToken.None));
+
+            StringAssert.Contains(ex.Message, path);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static void AssertEntry(OutlineEntry entry, int depth, string kind, string displayPart)
+    {
+        Assert.AreEqual(depth, entry.Depth, entry.Display);
+        Assert.AreEqual(kind, entry.Kind, entry.Display);
+        Assert.Contains(displayPart, entry.Display);
     }
 }

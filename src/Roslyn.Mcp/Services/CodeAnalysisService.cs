@@ -58,7 +58,7 @@ namespace Roslyn.Mcp.Services
             }
 
             // Multi-targeted projects report the same diagnostic once per target framework.
-            return diagnostics
+            var results = diagnostics
                 .Where(entry => entry.Diagnostic.Severity >= minimumSeverity && !entry.Diagnostic.IsSuppressed)
                 .Select(entry =>
                 {
@@ -79,7 +79,26 @@ namespace Roslyn.Mcp.Services
                 .ThenBy(d => d.FilePath)
                 .ThenBy(d => d.LineNumber)
                 .ToList();
+
+            var notFound = results.Where(d => d.Id is "CS0246" or "CS0234").ToList();
+            if (notFound.Count > RestoreHintThreshold)
+            {
+                results.Insert(0, new DiagnosticResult
+                {
+                    Id = RestoreHintId,
+                    Severity = DiagnosticSeverity.Error,
+                    Message = RestoreHintMessage,
+                    ProjectName = notFound[0].ProjectName,
+                });
+            }
+
+            return results;
         }
+
+        private const int RestoreHintThreshold = 10;
+        private const string RestoreHintId = "RMCP001";
+        private const string RestoreHintMessage =
+            "Many 'type or namespace not found' errors: packages are probably not restored. Run dotnet_project Restore.";
 
         private static readonly SymbolDisplayFormat OutlineFormat = new(
             typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameOnly,
