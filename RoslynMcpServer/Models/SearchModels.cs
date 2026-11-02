@@ -44,6 +44,7 @@ namespace RoslynMcpServer.Models
         public string ReturnType { get; set; } = string.Empty;
         public List<string> Attributes { get; set; } = new();
         public string SourceLocation { get; set; } = string.Empty;
+        public List<string> OtherMatches { get; set; } = new();
     }
 
     public class DependencyAnalysis
@@ -89,5 +90,45 @@ namespace RoslynMcpServer.Models
         public DateTime AnalysisStartTime { get; set; }
         public DateTime AnalysisEndTime { get; set; }
         public TimeSpan Duration => AnalysisEndTime - AnalysisStartTime;
+    }
+
+    public class SymbolLocationResult
+    {
+        public string DisplayName { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public string Relation { get; set; } = string.Empty;
+        public string ProjectName { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
+        public int LineNumber { get; set; }
+        public string LineText { get; set; } = string.Empty;
+    }
+
+    public class DiagnosticResult
+    {
+        public string Id { get; set; } = string.Empty;
+        public DiagnosticSeverity Severity { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string ProjectName { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
+        public int LineNumber { get; set; }
+        public int ColumnNumber { get; set; }
+    }
+
+    public class OutlineEntry
+    {
+        public int Depth { get; set; }
+        public string Kind { get; set; } = string.Empty;
+        public string Display { get; set; } = string.Empty;
+        public int StartLine { get; set; }
+        public int EndLine { get; set; }
+    }
+
+    public class WorkspaceSummary
+    {
+        public string SolutionPath { get; set; } = string.Empty;
+        public int ProjectCount { get; set; }
+        public int DocumentCount { get; set; }
+        public List<string> Projects { get; set; } = new();
+        public List<string> LoadWarnings { get; set; } = new();
     }
 }

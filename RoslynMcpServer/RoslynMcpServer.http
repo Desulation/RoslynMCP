@@ -4,6 +4,7 @@
 @mcpPath = /
 
 @solutionPath = "<path-placeholder(escape directories with double forward slashes)>"
+@filePath = "<path-to-a-.cs-file-in-the-solution(escape directories with double forward slashes)>"
 
 ### List MCP tools
 POST {{hostAddress}}{{mcpPath}}
@@ -29,7 +30,7 @@ MCP-Protocol-Version: 2025-11-25
   "id": 2,
   "method": "tools/call",
   "params": {
-    "name": "search_symbols",
+    "name": "roslyn_search_symbols",
     "arguments": {
       "pattern": "",
       "solutionPath": {{solutionPath}},
@@ -50,7 +51,7 @@ MCP-Protocol-Version: 2025-11-25
   "id": 3,
   "method": "tools/call",
   "params": {
-    "name": "find_references",
+    "name": "roslyn_find_references",
     "arguments": {
       "symbolName": "",
       "solutionPath": {{solutionPath}},
@@ -70,7 +71,7 @@ MCP-Protocol-Version: 2025-11-25
   "id": 4,
   "method": "tools/call",
   "params": {
-    "name": "get_symbol_info",
+    "name": "roslyn_get_symbol_info",
     "arguments": {
       "symbolName": "",
       "solutionPath": {{solutionPath}}
@@ -89,7 +90,7 @@ MCP-Protocol-Version: 2025-11-25
   "id": 5,
   "method": "tools/call",
   "params": {
-    "name": "analyze_dependencies",
+    "name": "roslyn_analyze_dependencies",
     "arguments": {
       "solutionPath": {{solutionPath}},
       "maxDepth": 3
@@ -108,10 +109,105 @@ MCP-Protocol-Version: 2025-11-25
   "id": 6,
   "method": "tools/call",
   "params": {
-    "name": "analyze_code_complexity",
+    "name": "roslyn_analyze_code_complexity",
     "arguments": {
       "solutionPath": {{solutionPath}},
       "threshold": 5
+    }
+  }
+}
+
+### FindImplementations
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "tools/call",
+  "params": {
+    "name": "roslyn_find_implementations",
+    "arguments": {
+      "symbolName": "",
+      "solutionPath": {{solutionPath}}
+    }
+  }
+}
+
+### FindCallers
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "method": "tools/call",
+  "params": {
+    "name": "roslyn_find_callers",
+    "arguments": {
+      "symbolName": "",
+      "solutionPath": {{solutionPath}}
+    }
+  }
+}
+
+### GetDocumentOutline
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "method": "tools/call",
+  "params": {
+    "name": "roslyn_get_document_outline",
+    "arguments": {
+      "filePath": {{filePath}},
+      "solutionPath": {{solutionPath}}
+    }
+  }
+}
+
+### GetDiagnostics
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "tools/call",
+  "params": {
+    "name": "roslyn_get_diagnostics",
+    "arguments": {
+      "solutionPath": {{solutionPath}},
+      "filePath": {{filePath}},
+      "minimumSeverity": "Warning"
+    }
+  }
+}
+
+### ReloadWorkspace
+POST {{hostAddress}}{{mcpPath}}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-11-25
+
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "method": "tools/call",
+  "params": {
+    "name": "roslyn_reload_workspace",
+    "arguments": {
+      "solutionPath": {{solutionPath}}
     }
   }
 }

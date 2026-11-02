@@ -1,7 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using RoslynMcpServer.Models;
@@ -11,190 +10,210 @@ using System.Text;
 
 namespace RoslynMcpServer.Tools
 {
+    /// <summary>
+    /// Read-only semantic code tools. Names use the "roslyn_" prefix so they sit cleanly next to
+    /// the "dotnet_" tools of the .NET MCP server (https://github.com/jongalloway/dotnet-mcp),
+    /// which covers the SDK/CLI side: creating projects, packages, build, test and run.
+    /// </summary>
     [McpServerToolType]
     public class CodeNavigationTools
     {
-        [McpServerTool, Description("Search for symbols in C# code using wildcard patterns (* and ?)")]
-        public static async Task<string> SearchSymbols(
+        private const string SolutionPathDescription =
+            "Absolute path to a .sln, .slnx or .csproj file, or to a directory containing exactly one of them " +
+            "(the same solution or project you pass to dotnet_* tools)";
+
+        private const string SymbolNameDescription =
+            "Symbol name, optionally qualified to disambiguate (e.g. 'Save', 'OrderService.Save', 'MyApp.Services.OrderService')";
+
+        [McpServerTool(Name = "roslyn_search_symbols", Title = "Search C# symbols",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Search for symbols declared in source using wildcard patterns (* and ?). Returns file paths and line numbers.")]
+        public static Task<string> SearchSymbols(
+            SecurityValidator validator,
+            SymbolSearchService searchService,
+            ILogger<CodeNavigationTools> logger,
             [Description("Wildcard pattern to search for (e.g., 'User*', '*Service', 'Get*User')")] string pattern,
-            [Description("Path to solution file (.sln)")] string solutionPath,
-            [Description("Symbol types to include: class,interface,method,property,field (comma-separated)")] string symbolTypes = "class,interface,method,property",
-            [Description("Whether to ignore case in search")] bool ignoreCase = true,
-            IServiceProvider? serviceProvider = null)
+            [Description(SolutionPathDescription)] string solutionPath,
+            [Description("Symbol types to include: class,interface,struct,enum,method,property,field,event (comma-separated)")] string symbolTypes = "class,interface,method,property",
+            [Description("Whether to ignore case in search")] bool ignoreCase = true)
         {
-            try
+            return ExecuteAsync(validator, logger, solutionPath, "symbol search", async () =>
             {
-                var validator = serviceProvider?.GetService<SecurityValidator>();
-                var logger = serviceProvider?.GetService<ILogger<CodeNavigationTools>>();
-
-                // Validate inputs
-                if (!validator?.ValidateSolutionPath(solutionPath) ?? false)
-                {
-                    return "Error: Invalid solution path provided.";
-                }
-
-                var sanitizedPattern = validator?.SanitizeSearchPattern(pattern) ?? pattern;
-
-                // Perform search with timeout
-                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-                var searchService = serviceProvider?.GetService<SymbolSearchService>();
-                if (searchService == null)
-                {
-                    return "Error: Symbol search service not available.";
-                }
-
+                var sanitizedPattern = validator.SanitizeSearchPattern(pattern);
                 var results = await searchService.SearchSymbolsAsync(
                     sanitizedPattern, solutionPath, symbolTypes, ignoreCase);
 
                 return FormatSearchResults(results);
-            }
-            catch (OperationCanceledException)
-            {
-                return "Error: Search operation timed out. The codebase may be too large or complex.";
-            }
-            catch (FileNotFoundException)
-            {
-                return "Error: Solution file not found. Please check the path and try again.";
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return "Error: Access denied. Please check file permissions.";
-            }
-            catch (Exception ex)
-            {
-                // Log full error details but return safe message
-                var logger = serviceProvider?.GetService<ILogger<CodeNavigationTools>>();
-                logger?.LogError(ex, "Unexpected error during symbol search");
-
-                return "Error: An unexpected error occurred during the search operation.";
-            }
+            });
         }
 
-        [McpServerTool, Description("Find all references to a specific symbol")]
-        public static async Task<string> FindReferences(
-            [Description("Exact symbol name to find references for")] string symbolName,
-            [Description("Path to solution file (.sln)")] string solutionPath,
-            [Description("Include symbol definition in results")] bool includeDefinition = true,
-            IServiceProvider? serviceProvider = null)
+        [McpServerTool(Name = "roslyn_find_references", Title = "Find references",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Find all references to a symbol across the solution, with surrounding line text.")]
+        public static Task<string> FindReferences(
+            SecurityValidator validator,
+            SymbolSearchService searchService,
+            ILogger<CodeNavigationTools> logger,
+            [Description(SymbolNameDescription)] string symbolName,
+            [Description(SolutionPathDescription)] string solutionPath,
+            [Description("Include symbol definition in results")] bool includeDefinition = true)
         {
-            try
+            return ExecuteAsync(validator, logger, solutionPath, "find references", async () =>
             {
-                var validator = serviceProvider?.GetService<SecurityValidator>();
-                if (!validator?.ValidateSolutionPath(solutionPath) ?? false)
-                {
-                    return "Error: Invalid solution path provided.";
-                }
-
-                var searchService = serviceProvider?.GetService<SymbolSearchService>();
-                if (searchService == null)
-                {
-                    return "Error: Symbol search service not available.";
-                }
-
                 var results = await searchService.FindReferencesAsync(symbolName, solutionPath, includeDefinition);
                 return FormatReferenceResults(results);
-            }
-            catch (Exception ex)
-            {
-                var logger = serviceProvider?.GetService<ILogger<CodeNavigationTools>>();
-                logger?.LogError(ex, "Error finding references for symbol: {SymbolName}", symbolName);
-                return "Error: An unexpected error occurred while finding references.";
-            }
+            });
         }
 
-        [McpServerTool, Description("Get detailed information about a specific symbol")]
-        public static async Task<string> GetSymbolInfo(
-            [Description("Exact symbol name or full qualified name")] string symbolName,
-            [Description("Path to solution file (.sln)")] string solutionPath,
-            IServiceProvider? serviceProvider = null)
+        [McpServerTool(Name = "roslyn_get_symbol_info", Title = "Get symbol info",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Get detailed information about a symbol: kind, signature, accessibility, attributes and declaration location.")]
+        public static Task<string> GetSymbolInfo(
+            SecurityValidator validator,
+            SymbolSearchService searchService,
+            ILogger<CodeNavigationTools> logger,
+            [Description(SymbolNameDescription)] string symbolName,
+            [Description(SolutionPathDescription)] string solutionPath)
         {
-            try
+            return ExecuteAsync(validator, logger, solutionPath, "get symbol info", async () =>
             {
-                var validator = serviceProvider?.GetService<SecurityValidator>();
-                if (!validator?.ValidateSolutionPath(solutionPath) ?? false)
-                {
-                    return "Error: Invalid solution path provided.";
-                }
-
-                var searchService = serviceProvider?.GetService<SymbolSearchService>();
-                if (searchService == null)
-                {
-                    return "Error: Symbol search service not available.";
-                }
-
                 var info = await searchService.GetSymbolInfoAsync(symbolName, solutionPath);
                 return FormatSymbolInfo(info);
-            }
-            catch (Exception ex)
-            {
-                var logger = serviceProvider?.GetService<ILogger<CodeNavigationTools>>();
-                logger?.LogError(ex, "Error getting symbol info for: {SymbolName}", symbolName);
-                return "Error: An unexpected error occurred while getting symbol information.";
-            }
+            });
         }
 
-        [McpServerTool, Description("Analyze project dependencies and symbol usage patterns")]
-        public static async Task<string> AnalyzeDependencies(
-            [Description("Path to solution file (.sln or .slnx)")] string solutionPath,
+        [McpServerTool(Name = "roslyn_find_implementations", Title = "Find implementations",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Find implementations of an interface or interface member, classes derived from a class, " +
+                     "and overrides of virtual/abstract members.")]
+        public static Task<string> FindImplementations(
+            SecurityValidator validator,
+            SymbolSearchService searchService,
+            ILogger<CodeNavigationTools> logger,
+            [Description(SymbolNameDescription)] string symbolName,
+            [Description(SolutionPathDescription)] string solutionPath,
+            CancellationToken cancellationToken = default)
+        {
+            return ExecuteAsync(validator, logger, solutionPath, "find implementations", async () =>
+            {
+                var results = await searchService.FindImplementationsAsync(symbolName, solutionPath, cancellationToken);
+                return FormatLocationResults(results, $"implementations of '{symbolName}'");
+            });
+        }
+
+        [McpServerTool(Name = "roslyn_find_callers", Title = "Find callers",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Find the methods, properties and constructors that call a method or access a property/event " +
+                     "(one level of the call hierarchy).")]
+        public static Task<string> FindCallers(
+            SecurityValidator validator,
+            SymbolSearchService searchService,
+            ILogger<CodeNavigationTools> logger,
+            [Description(SymbolNameDescription)] string symbolName,
+            [Description(SolutionPathDescription)] string solutionPath,
+            CancellationToken cancellationToken = default)
+        {
+            return ExecuteAsync(validator, logger, solutionPath, "find callers", async () =>
+            {
+                var results = await searchService.FindCallersAsync(symbolName, solutionPath, cancellationToken);
+                return FormatLocationResults(results, $"callers of '{symbolName}'");
+            });
+        }
+
+        [McpServerTool(Name = "roslyn_get_document_outline", Title = "Get file outline",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("List the namespaces, types and members declared in a C# file with signatures and line ranges, " +
+                     "so only the relevant lines need to be read.")]
+        public static Task<string> GetDocumentOutline(
+            SecurityValidator validator,
+            CodeAnalysisService analysisService,
+            ILogger<CodeNavigationTools> logger,
+            [Description("Absolute path to a .cs file in the solution")] string filePath,
+            [Description(SolutionPathDescription)] string solutionPath,
+            CancellationToken cancellationToken = default)
+        {
+            if (!validator.ValidateSourceFilePath(filePath))
+                return Task.FromResult("Error: Invalid file path provided. Pass an absolute path to an existing .cs file.");
+
+            return ExecuteAsync(validator, logger, solutionPath, "document outline", async () =>
+            {
+                var entries = await analysisService.GetDocumentOutlineAsync(solutionPath, filePath, cancellationToken);
+                return FormatOutline(filePath, entries);
+            });
+        }
+
+        [McpServerTool(Name = "roslyn_get_diagnostics", Title = "Get compiler diagnostics",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Get C# compiler errors and warnings from the in-memory workspace without running a build. " +
+                     "Fast feedback after editing a file; use dotnet_project Build for the authoritative result " +
+                     "(MSBuild, analyzers, source generators). Many CS0246 'type not found' errors usually mean " +
+                     "packages are not restored: run dotnet_project Restore.")]
+        public static Task<string> GetDiagnostics(
+            SecurityValidator validator,
+            CodeAnalysisService analysisService,
+            ILogger<CodeNavigationTools> logger,
+            [Description(SolutionPathDescription)] string solutionPath,
+            [Description("Optional absolute path to a single .cs file to check (much faster than the whole solution)")] string? filePath = null,
+            [Description("Minimum severity: Error, Warning or Info")] string minimumSeverity = "Warning",
+            [Description("Maximum number of diagnostics to return")] int maxResults = 100,
+            CancellationToken cancellationToken = default)
+        {
+            if (!string.IsNullOrWhiteSpace(filePath) && !validator.ValidateSourceFilePath(filePath))
+                return Task.FromResult("Error: Invalid file path provided. Pass an absolute path to an existing .cs file.");
+
+            if (!Enum.TryParse<DiagnosticSeverity>(minimumSeverity, ignoreCase: true, out var severity))
+                return Task.FromResult("Error: minimumSeverity must be Error, Warning or Info.");
+
+            return ExecuteAsync(validator, logger, solutionPath, "get diagnostics", async () =>
+            {
+                var diagnostics = await analysisService.GetDiagnosticsAsync(solutionPath, filePath, severity, cancellationToken);
+                return FormatDiagnostics(diagnostics, Math.Max(1, maxResults));
+            });
+        }
+
+        [McpServerTool(Name = "roslyn_analyze_dependencies", Title = "Analyze dependencies",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Analyze symbol counts, project/assembly references and namespace usage across the solution. " +
+                     "For NuGet package versions and updates use dotnet_package List instead.")]
+        public static Task<string> AnalyzeDependencies(
+            SecurityValidator validator,
+            CodeAnalysisService analysisService,
+            ILogger<CodeNavigationTools> logger,
+            [Description(SolutionPathDescription)] string solutionPath,
             [Description("Maximum depth for dependency analysis")] int maxDepth = 3,
-            IServiceProvider? serviceProvider = null)
+            CancellationToken cancellationToken = default)
         {
-            try
+            return ExecuteAsync(validator, logger, solutionPath, "dependency analysis", async () =>
             {
-                var validator = serviceProvider?.GetService<SecurityValidator>();
-                if (!validator?.ValidateSolutionPath(solutionPath) ?? false)
-                {
-                    return "Error: Invalid solution path provided.";
-                }
-
-                var analysisService = serviceProvider?.GetService<CodeAnalysisService>();
-                if (analysisService == null)
-                {
-                    return "Error: Code analysis service not available.";
-                }
-
-                var dependencies = await analysisService.AnalyzeDependenciesAsync(solutionPath, maxDepth);
+                var dependencies = await analysisService.AnalyzeDependenciesAsync(solutionPath, maxDepth, cancellationToken);
                 return FormatDependencyAnalysis(dependencies);
-            }
-            catch (Exception ex)
-            {
-                var logger = serviceProvider?.GetService<ILogger<CodeNavigationTools>>();
-                logger?.LogError(ex, "Error analyzing dependencies");
-                return "Error: An unexpected error occurred during dependency analysis.";
-            }
+            });
         }
 
-        [McpServerTool, Description("Analyze code complexity and identify high-complexity methods")]
-        public static async Task<string> AnalyzeCodeComplexity(
-            [Description("Path to solution file")] string solutionPath,
+        [McpServerTool(Name = "roslyn_analyze_code_complexity", Title = "Analyze code complexity",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Find methods whose cyclomatic complexity is at or above a threshold.")]
+        public static Task<string> AnalyzeCodeComplexity(
+            SecurityValidator validator,
+            CodeAnalysisService analysisService,
+            ILogger<CodeNavigationTools> logger,
+            [Description(SolutionPathDescription)] string solutionPath,
             [Description("Complexity threshold (1-10)")] int threshold = 5,
-            IServiceProvider? serviceProvider = null)
+            CancellationToken cancellationToken = default)
         {
-            try
+            return ExecuteAsync(validator, logger, solutionPath, "complexity analysis", async () =>
             {
-                var validator = serviceProvider?.GetService<SecurityValidator>();
-                if (!validator?.ValidateSolutionPath(solutionPath) ?? false)
-                {
-                    return "Error: Invalid solution path provided.";
-                }
-
-                var analysisService = serviceProvider?.GetService<CodeAnalysisService>();
-                if (analysisService == null)
-                {
-                    return "Error: Code analysis service not available.";
-                }
-
-                var solution = await analysisService.GetSolutionAsync(solutionPath);
+                var solution = await analysisService.GetSolutionAsync(solutionPath, cancellationToken);
                 var complexityResults = new List<ComplexityResult>();
 
                 foreach (var project in solution.Projects.Where(p => p.SupportsCompilation))
                 {
-                    var compilation = await project.GetCompilationAsync();
+                    var compilation = await project.GetCompilationAsync(cancellationToken);
                     if (compilation == null) continue;
 
                     foreach (var tree in compilation.SyntaxTrees)
                     {
-                        var root = await tree.GetRootAsync();
+                        var root = await tree.GetRootAsync(cancellationToken);
                         var methods = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
 
                         foreach (var method in methods)
@@ -206,7 +225,7 @@ namespace RoslynMcpServer.Tools
                                 complexityResults.Add(new ComplexityResult
                                 {
                                     MethodName = method.Identifier.ValueText,
-                                    FileName = Path.GetFileName(tree.FilePath),
+                                    FileName = tree.FilePath,
                                     LineNumber = lineSpan.StartLinePosition.Line + 1,
                                     Complexity = complexity,
                                     ClassName = GetContainingClassName(method),
@@ -217,13 +236,72 @@ namespace RoslynMcpServer.Tools
                     }
                 }
 
-                return FormatComplexityResults(complexityResults);
+                // Multi-targeted projects contain the same syntax trees once per target framework.
+                var distinct = complexityResults
+                    .DistinctBy(r => (r.FileName, r.LineNumber))
+                    .ToList();
+
+                return FormatComplexityResults(distinct);
+            });
+        }
+
+        [McpServerTool(Name = "roslyn_reload_workspace", Title = "Reload workspace",
+            ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
+        [Description("Discard the cached Roslyn workspace and load the solution again. The workspace already refreshes " +
+                     "itself when files change on disk; use this if results still look stale, or to see MSBuild load warnings.")]
+        public static Task<string> ReloadWorkspace(
+            SecurityValidator validator,
+            CodeAnalysisService analysisService,
+            ILogger<CodeNavigationTools> logger,
+            [Description(SolutionPathDescription)] string solutionPath,
+            CancellationToken cancellationToken = default)
+        {
+            return ExecuteAsync(validator, logger, solutionPath, "reload workspace", async () =>
+            {
+                var summary = await analysisService.ReloadAsync(solutionPath, cancellationToken);
+                return FormatWorkspaceSummary(summary);
+            });
+        }
+
+        private static async Task<string> ExecuteAsync(
+            SecurityValidator validator,
+            ILogger logger,
+            string solutionPath,
+            string operation,
+            Func<Task<string>> action)
+        {
+            if (!validator.ValidateSolutionPath(solutionPath))
+            {
+                return "Error: Invalid solution path provided. Pass an absolute path to a .sln, .slnx or .csproj file, " +
+                       "or to a directory that contains one.";
+            }
+
+            try
+            {
+                return await action();
+            }
+            catch (OperationCanceledException)
+            {
+                return $"Error: The {operation} operation was cancelled or timed out.";
+            }
+            catch (FileNotFoundException)
+            {
+                return "Error: Solution file not found. Please check the path and try again.";
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return "Error: Access denied. Please check file permissions.";
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+            {
+                // These carry messages written by this server (ambiguous solution, file not in solution, ...).
+                return $"Error: {ex.Message}";
             }
             catch (Exception ex)
             {
-                var logger = serviceProvider?.GetService<ILogger<CodeNavigationTools>>();
-                logger?.LogError(ex, "Error analyzing code complexity");
-                return "Error: An unexpected error occurred during complexity analysis.";
+                // Log full error details but return safe message
+                logger.LogError(ex, "Unexpected error during {Operation}", operation);
+                return $"Error: An unexpected error occurred during the {operation} operation.";
             }
         }
 
@@ -239,7 +317,7 @@ namespace RoslynMcpServer.Tools
                 output.AppendLine($"**{group.Key}** ({group.Count()}):");
                 foreach (var result in group.Take(20)) // Limit results
                 {
-                    output.AppendLine($"  • `{result.Name}` in {result.Location}");
+                    output.AppendLine($"  • `{result.FullName}` in {result.Location}");
                     if (!string.IsNullOrEmpty(result.Summary))
                         output.AppendLine($"    {result.Summary}");
                 }
@@ -260,7 +338,7 @@ namespace RoslynMcpServer.Tools
 
             foreach (var fileGroup in groupedByFile.OrderBy(g => g.Key))
             {
-                output.AppendLine($"**{Path.GetFileName(fileGroup.Key)}** ({fileGroup.Count()} references):");
+                output.AppendLine($"**{fileGroup.Key}** ({fileGroup.Count()} references):");
 
                 foreach (var reference in fileGroup.OrderBy(r => r.LineNumber))
                 {
@@ -288,10 +366,10 @@ namespace RoslynMcpServer.Tools
                 output.AppendLine($"Namespace: {info.Namespace}");
 
             if (!string.IsNullOrEmpty(info.DeclaringType))
-                output.AppendLine($"Declaring Type: {info.DeclaringType}`");
+                output.AppendLine($"Declaring Type: {info.DeclaringType}");
 
             if (!string.IsNullOrEmpty(info.ReturnType))
-                output.AppendLine($"Return Type: {info.ReturnType}`");
+                output.AppendLine($"Return Type: {info.ReturnType}");
 
             if (info.Parameters.Any())
             {
@@ -308,7 +386,99 @@ namespace RoslynMcpServer.Tools
             }
 
             if (!string.IsNullOrEmpty(info.SourceLocation))
-                output.AppendLine($"Location: {info.SourceLocation}`");
+                output.AppendLine($"Location: {info.SourceLocation}");
+
+            if (info.OtherMatches.Any())
+            {
+                output.AppendLine("Other symbols with this name (qualify the name to select one):");
+                foreach (var match in info.OtherMatches)
+                    output.AppendLine($"  • `{match}`");
+            }
+
+            return output.ToString();
+        }
+
+        private static string FormatLocationResults(List<SymbolLocationResult> results, string title)
+        {
+            if (results.Count == 0)
+                return $"No {title} found.";
+
+            var output = new StringBuilder();
+            output.AppendLine($"Found {results.Count} {title}:\n");
+
+            foreach (var fileGroup in results.GroupBy(r => r.FilePath))
+            {
+                output.AppendLine($"**{fileGroup.Key}**:");
+                foreach (var result in fileGroup)
+                {
+                    output.AppendLine($"  • Line {result.LineNumber}: `{result.DisplayName}` ({result.Kind}, {result.Relation})");
+                    if (!string.IsNullOrEmpty(result.LineText))
+                        output.AppendLine($"    `{result.LineText}`");
+                }
+                output.AppendLine();
+            }
+
+            return output.ToString();
+        }
+
+        private static string FormatOutline(string filePath, List<OutlineEntry> entries)
+        {
+            if (entries.Count == 0)
+                return $"No declarations found in {filePath}.";
+
+            var output = new StringBuilder();
+            output.AppendLine($"**Outline of {filePath}**\n");
+
+            foreach (var entry in entries)
+            {
+                var indent = new string(' ', entry.Depth * 2);
+                var lines = entry.StartLine == entry.EndLine
+                    ? $"L{entry.StartLine}"
+                    : $"L{entry.StartLine}-{entry.EndLine}";
+                output.AppendLine($"{indent}- {lines} [{entry.Kind}] `{entry.Display}`");
+            }
+
+            return output.ToString();
+        }
+
+        private static string FormatDiagnostics(List<DiagnosticResult> diagnostics, int maxResults)
+        {
+            if (diagnostics.Count == 0)
+                return "No diagnostics found.";
+
+            var output = new StringBuilder();
+            var errors = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
+            var warnings = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);
+            output.AppendLine($"Found {errors} errors, {warnings} warnings, {diagnostics.Count - errors - warnings} other:\n");
+
+            foreach (var diagnostic in diagnostics.Take(maxResults))
+            {
+                var location = string.IsNullOrEmpty(diagnostic.FilePath)
+                    ? $"[{diagnostic.ProjectName}]"
+                    : $"{diagnostic.FilePath}({diagnostic.LineNumber},{diagnostic.ColumnNumber})";
+                output.AppendLine($"{location}: {diagnostic.Severity.ToString().ToLowerInvariant()} {diagnostic.Id}: {diagnostic.Message}");
+            }
+
+            if (diagnostics.Count > maxResults)
+                output.AppendLine($"\n... and {diagnostics.Count - maxResults} more (narrow with filePath or minimumSeverity)");
+
+            return output.ToString();
+        }
+
+        private static string FormatWorkspaceSummary(WorkspaceSummary summary)
+        {
+            var output = new StringBuilder();
+            output.AppendLine($"Reloaded {summary.SolutionPath}");
+            output.AppendLine($"Projects: {summary.ProjectCount}, Documents: {summary.DocumentCount}");
+            foreach (var project in summary.Projects)
+                output.AppendLine($"  • {project}");
+
+            if (summary.LoadWarnings.Any())
+            {
+                output.AppendLine("\nMSBuild load warnings:");
+                foreach (var warning in summary.LoadWarnings.Take(20))
+                    output.AppendLine($"  • {warning}");
+            }
 
             return output.ToString();
         }
@@ -319,9 +489,9 @@ namespace RoslynMcpServer.Tools
             output.AppendLine($"**Dependency Analysis for {analysis.ProjectName}**\n");
 
             output.AppendLine("Symbol Summary:");
-            output.AppendLine($"  • Total Symbols: {analysis.TotalSymbols}`");
-            output.AppendLine($"  • Public Symbols: {analysis.PublicSymbols}`");
-            output.AppendLine($"  • Internal Symbols: {analysis.InternalSymbols}`");
+            output.AppendLine($"  • Total Symbols: {analysis.TotalSymbols}");
+            output.AppendLine($"  • Public Symbols: {analysis.PublicSymbols}");
+            output.AppendLine($"  • Internal Symbols: {analysis.InternalSymbols}");
             output.AppendLine();
 
             if (analysis.Dependencies.Any())
@@ -332,9 +502,9 @@ namespace RoslynMcpServer.Tools
                 {
                     output.AppendLine($"  **{group.Key}** ({group.Count()}):");
                     foreach (var dep in group.Take(10))
-                        output.AppendLine($"    • {dep.Name}`");
+                        output.AppendLine($"    • {dep.Name}");
                     if (group.Count() > 10)
-                        output.AppendLine($"    ... and {group.Count() - 10} more`");
+                        output.AppendLine($"    ... and {group.Count() - 10} more");
                 }
                 output.AppendLine();
             }
@@ -343,7 +513,7 @@ namespace RoslynMcpServer.Tools
             {
                 output.AppendLine("Top Namespace Usages:");
                 foreach (var usage in analysis.NamespaceUsages.OrderByDescending(n => n.UsageCount).Take(10))
-                    output.AppendLine($"  • {usage.Namespace}: {usage.UsageCount} usages`");
+                    output.AppendLine($"  • {usage.Namespace}: {usage.UsageCount} usages");
             }
 
             return output.ToString();
@@ -357,15 +527,15 @@ namespace RoslynMcpServer.Tools
 
             foreach (var result in results.OrderByDescending(r => r.Complexity).Take(20))
             {
-                output.AppendLine($"**{result.ClassName}.{result.MethodName}** (Complexity: {result.Complexity})`");
-                output.AppendLine($"  Location: {result.FileName}:{result.LineNumber}`");
+                output.AppendLine($"**{result.ClassName}.{result.MethodName}** (Complexity: {result.Complexity})");
+                output.AppendLine($"  Location: {result.FileName}:{result.LineNumber}");
                 if (!string.IsNullOrEmpty(result.Namespace))
-                    output.AppendLine($"  Namespace: {result.Namespace}`");
+                    output.AppendLine($"  Namespace: {result.Namespace}");
                 output.AppendLine();
             }
 
             if (results.Count > 20)
-                output.AppendLine($"... and {results.Count - 20} more methods with high complexity`");
+                output.AppendLine($"... and {results.Count - 20} more methods with high complexity");
 
             return output.ToString();
         }
@@ -402,7 +572,7 @@ namespace RoslynMcpServer.Tools
 
         private static string GetContainingNamespace(MethodDeclarationSyntax method)
         {
-            var namespaceDeclaration = method.Ancestors().OfType<NamespaceDeclarationSyntax>().FirstOrDefault();
+            var namespaceDeclaration = method.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault();
             return namespaceDeclaration?.Name.ToString() ?? "";
         }
     }

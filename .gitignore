@@ -1,5 +1,24 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
-################################################################################
+﻿# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+*.mcpb
 
-/.vs
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+*.swp
+
+# Test results
+TestResults/
+*.trx
+
+# NuGet
+*.nupkg
+project.lock.json
+
+# OS
+.DS_Store
+Thumbs.db

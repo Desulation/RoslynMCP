@@ -116,7 +116,9 @@ namespace RoslynMcpServer.Services
 
         private IEnumerable<ISymbol> GetFilteredSymbols(Compilation compilation, HashSet<SymbolKind> typeFilter)
         {
-            return GetAllSymbolsRecursive(compilation.GlobalNamespace)
+            // Only symbols declared in source: compilation.GlobalNamespace would also walk every
+            // referenced assembly and repeat project-referenced symbols once per referencing project.
+            return GetAllSymbolsRecursive(compilation.Assembly.GlobalNamespace)
                 .Where(s => typeFilter.Contains(s.Kind));
         }
 
@@ -134,9 +136,27 @@ namespace RoslynMcpServer.Services
                         break;
 
                     case INamedTypeSymbol namedType:
-                        foreach (var typeMember in namedType.GetMembers())
+                        foreach (var typeMember in GetTypeMembersRecursive(namedType))
                             yield return typeMember;
                         break;
+                }
+            }
+        }
+
+        private IEnumerable<ISymbol> GetTypeMembersRecursive(INamedTypeSymbol type)
+        {
+            foreach (var member in type.GetMembers())
+            {
+                // Skip compiler-generated members and property/event accessors.
+                if (member.IsImplicitlyDeclared || member is IMethodSymbol { AssociatedSymbol: not null })
+                    continue;
+
+                yield return member;
+
+                if (member is INamedTypeSymbol nestedType)
+                {
+                    foreach (var nested in GetTypeMembersRecursive(nestedType))
+                        yield return nested;
                 }
             }
         }
@@ -151,7 +171,7 @@ namespace RoslynMcpServer.Services
                 Name = symbol.Name,
                 FullName = symbol.ToDisplayString(),
                 Category = GetSymbolCategory(symbol),
-                Location = $"{project.Name}:{Path.GetFileName(location?.SourceTree?.FilePath)}:{lineNumber}",
+                Location = $"{location?.SourceTree?.FilePath}:{lineNumber}",
                 ProjectName = project.Name,
                 FilePath = location?.SourceTree?.FilePath ?? "",
                 LineNumber = lineNumber,
@@ -251,7 +271,7 @@ namespace RoslynMcpServer.Services
                 .ThenBy(r => r.LineNumber);
         }
 
-        private async Task<IEnumerable<ISymbol>> FindSymbolsByNameAsync(Solution solution, string symbolName)
+        private async Task<List<ISymbol>> FindSymbolsByNameAsync(Solution solution, string symbolName)
         {
             var symbols = new List<ISymbol>();
 
@@ -260,13 +280,141 @@ namespace RoslynMcpServer.Services
                 var compilation = await project.GetCompilationAsync();
                 if (compilation != null)
                 {
-                    var projectSymbols = GetAllSymbolsRecursive(compilation.GlobalNamespace)
-                        .Where(s => s.Name.Equals(symbolName, StringComparison.OrdinalIgnoreCase));
+                    var projectSymbols = GetAllSymbolsRecursive(compilation.Assembly.GlobalNamespace)
+                        .Where(s => MatchesName(s, symbolName));
                     symbols.AddRange(projectSymbols);
                 }
             }
 
-            return symbols;
+            // Multi-targeted projects produce one copy of each symbol per target framework.
+            return symbols
+                .DistinctBy(s => (s.ToDisplayString(), FormatLocation(s.Locations.FirstOrDefault())))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Matches a simple name ("Save") or a name qualified by its containers ("OrderService.Save",
+        /// "MyApp.Services.OrderService").
+        /// </summary>
+        private static bool MatchesName(ISymbol symbol, string symbolName)
+        {
+            if (symbol.Name.Equals(symbolName, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!symbolName.Contains('.') || symbol.ContainingSymbol == null)
+                return false;
+
+            var qualifiedName = $"{symbol.ContainingSymbol.ToDisplayString()}.{symbol.Name}";
+            return qualifiedName.Equals(symbolName, StringComparison.OrdinalIgnoreCase) ||
+                   qualifiedName.EndsWith("." + symbolName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FormatLocation(Location? location)
+        {
+            if (location == null || !location.IsInSource)
+                return "";
+
+            var lineSpan = location.GetLineSpan();
+            return $"{lineSpan.Path}:{lineSpan.StartLinePosition.Line + 1}";
+        }
+
+        public async Task<List<SymbolLocationResult>> FindImplementationsAsync(
+            string symbolName, string solutionPath, CancellationToken cancellationToken = default)
+        {
+            var solution = await _codeAnalysis.GetSolutionAsync(solutionPath, cancellationToken);
+            var targets = await FindSymbolsByNameAsync(solution, symbolName);
+            var results = new List<SymbolLocationResult>();
+
+            foreach (var target in targets)
+            {
+                var found = new List<(ISymbol Symbol, string Relation)>();
+
+                if (target is INamedTypeSymbol type)
+                {
+                    if (type.TypeKind == TypeKind.Interface)
+                    {
+                        found.AddRange((await SymbolFinder.FindImplementationsAsync(type, solution, transitive: true, cancellationToken: cancellationToken))
+                            .Select(s => ((ISymbol)s, $"implements {type.Name}")));
+                        found.AddRange((await SymbolFinder.FindDerivedInterfacesAsync(type, solution, transitive: true, cancellationToken: cancellationToken))
+                            .Select(s => ((ISymbol)s, $"extends {type.Name}")));
+                    }
+                    else if (type.TypeKind == TypeKind.Class)
+                    {
+                        found.AddRange((await SymbolFinder.FindDerivedClassesAsync(type, solution, transitive: true, cancellationToken: cancellationToken))
+                            .Select(s => ((ISymbol)s, $"derives from {type.Name}")));
+                    }
+                }
+                else if (target is IMethodSymbol or IPropertySymbol or IEventSymbol)
+                {
+                    var owner = target.ContainingType?.Name ?? "";
+                    found.AddRange((await SymbolFinder.FindImplementationsAsync(target, solution, cancellationToken: cancellationToken))
+                        .Select(s => (s, $"implements {owner}.{target.Name}")));
+                    found.AddRange((await SymbolFinder.FindOverridesAsync(target, solution, cancellationToken: cancellationToken))
+                        .Select(s => (s, $"overrides {owner}.{target.Name}")));
+                }
+
+                foreach (var (symbol, relation) in found)
+                {
+                    foreach (var location in symbol.Locations.Where(l => l.IsInSource))
+                        results.Add(await CreateLocationResultAsync(solution, symbol, location, relation, cancellationToken));
+                }
+            }
+
+            return results
+                .DistinctBy(r => (r.DisplayName, r.FilePath, r.LineNumber))
+                .OrderBy(r => r.FilePath)
+                .ThenBy(r => r.LineNumber)
+                .ToList();
+        }
+
+        public async Task<List<SymbolLocationResult>> FindCallersAsync(
+            string symbolName, string solutionPath, CancellationToken cancellationToken = default)
+        {
+            var solution = await _codeAnalysis.GetSolutionAsync(solutionPath, cancellationToken);
+            var targets = (await FindSymbolsByNameAsync(solution, symbolName))
+                .Where(s => s is IMethodSymbol or IPropertySymbol or IEventSymbol);
+            var results = new List<SymbolLocationResult>();
+
+            foreach (var target in targets)
+            {
+                var callers = await SymbolFinder.FindCallersAsync(target, solution, cancellationToken);
+                foreach (var caller in callers)
+                {
+                    var relation = caller.IsDirect ? $"calls {target.Name}" : $"calls {target.Name} (via interface or override)";
+                    foreach (var location in caller.Locations.Where(l => l.IsInSource))
+                        results.Add(await CreateLocationResultAsync(solution, caller.CallingSymbol, location, relation, cancellationToken));
+                }
+            }
+
+            return results
+                .DistinctBy(r => (r.DisplayName, r.FilePath, r.LineNumber))
+                .OrderBy(r => r.FilePath)
+                .ThenBy(r => r.LineNumber)
+                .ToList();
+        }
+
+        private static async Task<SymbolLocationResult> CreateLocationResultAsync(
+            Solution solution, ISymbol symbol, Location location, string relation, CancellationToken cancellationToken)
+        {
+            var lineSpan = location.GetLineSpan();
+            var lineText = "";
+            var document = solution.GetDocument(location.SourceTree);
+            if (document != null)
+            {
+                var text = await document.GetTextAsync(cancellationToken);
+                lineText = text.Lines[lineSpan.StartLinePosition.Line].ToString().Trim();
+            }
+
+            return new SymbolLocationResult
+            {
+                DisplayName = symbol.ToDisplayString(),
+                Kind = symbol is INamedTypeSymbol type ? type.TypeKind.ToString() : symbol.Kind.ToString(),
+                Relation = relation,
+                ProjectName = document?.Project.Name ?? "",
+                FilePath = lineSpan.Path,
+                LineNumber = lineSpan.StartLinePosition.Line + 1,
+                LineText = lineText,
+            };
         }
 
         private async Task<ReferenceResult?> CreateReferenceResultAsync(
@@ -323,6 +471,7 @@ namespace RoslynMcpServer.Services
             var solution = await _codeAnalysis.GetSolutionAsync(solutionPath);
             var symbols = await FindSymbolsByNameAsync(solution, symbolName);
             var symbol = symbols.FirstOrDefault();
+            var otherMatches = symbols.Skip(1).Select(s => s.ToDisplayString()).Take(10).ToList();
 
             if (symbol == null) return null;
 
@@ -341,14 +490,14 @@ namespace RoslynMcpServer.Services
             // Add method-specific information
             if (symbol is IMethodSymbol method)
             {
-                info.Parameters = method.Parameters.Select(p => $"{p.Type.Name} {p.Name}").ToList();
-                info.ReturnType = method.ReturnType.Name;
+                info.Parameters = method.Parameters.Select(p => $"{p.Type.ToDisplayString()} {p.Name}").ToList();
+                info.ReturnType = method.ReturnType.ToDisplayString();
             }
 
             // Add property-specific information
             if (symbol is IPropertySymbol property)
             {
-                info.ReturnType = property.Type.Name;
+                info.ReturnType = property.Type.ToDisplayString();
             }
 
             // Add attributes
@@ -362,8 +511,10 @@ namespace RoslynMcpServer.Services
             if (location != null && location.SourceTree != null)
             {
                 var lineSpan = location.GetLineSpan();
-                info.SourceLocation = $"{Path.GetFileName(location.SourceTree.FilePath)}:{lineSpan.StartLinePosition.Line + 1}";
+                info.SourceLocation = $"{location.SourceTree.FilePath}:{lineSpan.StartLinePosition.Line + 1}";
             }
+
+            info.OtherMatches = otherMatches;
 
             return info;
         }

@@ -59,58 +59,29 @@ A C# MCP (Model Context Protocol) server that integrates with Microsoft's Roslyn
 
 ## Claude Desktop Configuration
 
-To connect this MCP server to Claude Desktop, you need to modify the Claude Desktop configuration file:
-
-### Configuration File Location
-
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-### Configuration Content
-
-Add the following to your `claude_desktop_config.json` file:
+Edit `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS). Claude Desktop launches servers over stdio, so pass `--stdio`:
 
 ```json
 {
   "mcpServers": {
-    "roslyn-code-navigator": {
+    "roslyn": {
       "command": "dotnet",
       "args": [
-        "run", 
-        "--project", 
-        "D:\\Source\\RoslynMCP\\RoslynMcpServer"
-      ],
-      "env": {
-        "DOTNET_ENVIRONMENT": "Production",
-        "LOG_LEVEL": "Information"
-      }
+        "run", "--project", "D:\\Source\\RoslynMCP\\RoslynMcpServer",
+        "--no-launch-profile", "--", "--stdio"
+      ]
     }
   }
 }
 ```
 
 **Important Notes:**
-- Replace `D:\\Source\\RoslynMCP\\RoslynMcpServer` with the actual absolute path to your project
+- Replace `D:\\Source\\RoslynMCP\\RoslynMcpServer` with the absolute path to your project
 - Use double backslashes (`\\`) in Windows paths for proper JSON escaping
-- The path must be absolute - relative paths will not work
+- `--no-launch-profile` keeps `dotnet run` from writing to stdout, which carries the MCP protocol
+- Or use the built executable: `"command": "D:\\Source\\RoslynMCP\\RoslynMcpServer\\bin\\Debug\\net10.0\\RoslynMcpServer.exe", "args": ["--stdio"]`
 
-### Alternative: Using dotnet run directly
-
-If you prefer to use the built executable:
-
-```json
-{
-  "mcpServers": {
-    "roslyn-code-navigator": {
-      "command": "D:\\Source\\RoslynMCP\\RoslynMcpServer\\bin\\Debug\\net8.0\\RoslynMcpServer.exe",
-      "args": [],
-      "env": {
-        "DOTNET_ENVIRONMENT": "Production"
-      }
-    }
-  }
-}
-```
+To run it next to the [.NET MCP Server (dotnet-mcp)](https://github.com/jongalloway/dotnet-mcp), see "Using with the .NET MCP Server" in the [repository README](../README.md#using-with-the-net-mcp-server-dotnet-mcp).
 
 ## Usage
 
@@ -124,7 +95,7 @@ Search for symbols using wildcard patterns:
 Search for all classes ending with 'Service' in my solution at C:\MyProject\MyProject.sln
 ```
 
-This will use the `SearchSymbols` tool with pattern `*Service` and symbol types `class`.
+This will use the `roslyn_search_symbols` tool with pattern `*Service` and symbol types `class`.
 
 ### 2. Find References
 Find all references to a specific symbol:
@@ -160,28 +131,42 @@ Find methods with complexity higher than 7 in C:\MyProject\MyProject.sln
 
 ## Tool Parameters
 
-### SearchSymbols
+Every tool takes `solutionPath`: an absolute path to a `.sln`, `.slnx` or `.csproj` file, or a directory containing exactly one of them.
+
+### roslyn_search_symbols
 - `pattern`: Wildcard pattern (* and ? supported)
-- `solutionPath`: Absolute path to .sln file
-- `symbolTypes`: Comma-separated list (class,interface,method,property,field)
+- `symbolTypes`: Comma-separated list (class,interface,struct,enum,method,property,field,event)
 - `ignoreCase`: Boolean (default: true)
 
-### FindReferences
-- `symbolName`: Exact symbol name to find
-- `solutionPath`: Absolute path to .sln file
+### roslyn_find_references
+- `symbolName`: Symbol name, optionally qualified (`OrderService.Save`)
 - `includeDefinition`: Include symbol definition (default: true)
 
-### GetSymbolInfo
-- `symbolName`: Symbol name or fully qualified name
-- `solutionPath`: Absolute path to .sln file
+### roslyn_get_symbol_info
+- `symbolName`: Symbol name, optionally qualified
 
-### AnalyzeDependencies
-- `solutionPath`: Absolute path to .sln file
+### roslyn_find_implementations
+- `symbolName`: Interface, class, or virtual/abstract/interface member
+
+### roslyn_find_callers
+- `symbolName`: Method, property or event
+
+### roslyn_get_document_outline
+- `filePath`: Absolute path to a `.cs` file in the solution
+
+### roslyn_get_diagnostics
+- `filePath`: Optional `.cs` file to check (much faster than the whole solution)
+- `minimumSeverity`: Error, Warning or Info (default: Warning)
+- `maxResults`: Default 100
+
+### roslyn_analyze_dependencies
 - `maxDepth`: Maximum analysis depth (default: 3)
 
-### AnalyzeCodeComplexity
-- `solutionPath`: Absolute path to .sln file
+### roslyn_analyze_code_complexity
 - `threshold`: Complexity threshold 1-10 (default: 5)
+
+### roslyn_reload_workspace
+- No extra parameters. The workspace already refreshes itself when files change; use this to force a reload or see MSBuild load warnings.
 
 ## Development and Testing
 
