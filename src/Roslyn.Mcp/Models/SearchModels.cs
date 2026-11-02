@@ -47,24 +47,23 @@ namespace Roslyn.Mcp.Models
         public List<string> OtherMatches { get; set; } = new();
     }
 
-    public class DependencyAnalysis
+    public sealed class DependencyAnalysis
     {
-        public string ProjectName { get; set; } = string.Empty;
-        public List<ProjectDependency> Dependencies { get; set; } = new();
+        public string SolutionName { get; set; } = string.Empty;
+        public List<ProjectSummary> Projects { get; set; } = new();
         public List<NamespaceUsage> NamespaceUsages { get; set; } = new();
+    }
+
+    public sealed class ProjectSummary
+    {
+        public string Name { get; set; } = string.Empty;
         public int TotalSymbols { get; set; }
         public int PublicSymbols { get; set; }
         public int InternalSymbols { get; set; }
+        public List<string> ProjectReferences { get; set; } = new();
     }
 
-    public class ProjectDependency
-    {
-        public string Name { get; set; } = string.Empty;
-        public string Type { get; set; } = string.Empty; // ProjectReference, PackageReference, etc.
-        public int UsageCount { get; set; }
-    }
-
-    public class NamespaceUsage
+    public sealed class NamespaceUsage
     {
         public string Namespace { get; set; } = string.Empty;
         public int UsageCount { get; set; }

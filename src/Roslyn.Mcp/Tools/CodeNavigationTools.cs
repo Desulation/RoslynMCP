@@ -188,19 +188,20 @@ namespace Roslyn.Mcp.Tools
 
         [McpServerTool(Name = "roslyn_analyze_dependencies", Title = "Analyze dependencies",
             ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
-        [Description("Analyze symbol counts, project/assembly references and namespace usage across the solution. " +
-                     "For NuGet package versions and updates use dotnet_package List instead.")]
+        [Description("Report what Roslyn knows about the solution: per-project symbol counts (total/public/internal), " +
+                     "project references as compiled, and the most used namespaces from using directives. " +
+                     "For NuGet packages and versions use dotnet_package List; for MSBuild-level project info use dotnet_project Analyze.")]
         public static Task<string> AnalyzeDependencies(
             SecurityValidator validator,
             CodeAnalysisService analysisService,
             ILogger<CodeNavigationTools> logger,
             [Description(SolutionPathDescription)] string solutionPath,
-            [Description("Maximum depth for dependency analysis")] int maxDepth = 3,
+            [Description("Maximum number of namespaces to list, most used first")] int maxNamespaces = 20,
             CancellationToken cancellationToken = default)
         {
             return ExecuteAsync(validator, logger, solutionPath, "dependency analysis", async () =>
             {
-                var dependencies = await analysisService.AnalyzeDependenciesAsync(solutionPath, maxDepth, cancellationToken);
+                var dependencies = await analysisService.AnalyzeDependenciesAsync(solutionPath, maxNamespaces, cancellationToken);
                 return FormatDependencyAnalysis(dependencies);
             });
         }
@@ -464,35 +465,24 @@ namespace Roslyn.Mcp.Tools
         private static string FormatDependencyAnalysis(DependencyAnalysis analysis)
         {
             var output = new StringBuilder();
-            output.AppendLine($"**Dependency Analysis for {analysis.ProjectName}**\n");
+            output.AppendLine($"**Dependency Analysis for {analysis.SolutionName}**\n");
 
-            output.AppendLine("Symbol Summary:");
-            output.AppendLine($"  • Total Symbols: {analysis.TotalSymbols}");
-            output.AppendLine($"  • Public Symbols: {analysis.PublicSymbols}");
-            output.AppendLine($"  • Internal Symbols: {analysis.InternalSymbols}");
+            foreach (var project in analysis.Projects)
+            {
+                var references = project.ProjectReferences.Count > 0
+                    ? string.Join(", ", project.ProjectReferences)
+                    : "none";
+                output.AppendLine($"{project.Name} — {project.TotalSymbols} symbols " +
+                                  $"({project.PublicSymbols} public, {project.InternalSymbols} internal); " +
+                                  $"references: {references}");
+            }
+
             output.AppendLine();
-
-            if (analysis.Dependencies.Count > 0)
-            {
-                output.AppendLine("Dependencies:");
-                var groupedDeps = analysis.Dependencies.GroupBy(d => d.Type);
-                foreach (var group in groupedDeps)
-                {
-                    output.AppendLine($"  **{group.Key}** ({group.Count()}):");
-                    foreach (var dep in group.Take(10))
-                        output.AppendLine($"    • {dep.Name}");
-                    if (group.Count() > 10)
-                        output.AppendLine($"    ... and {group.Count() - 10} more");
-                }
-                output.AppendLine();
-            }
-
-            if (analysis.NamespaceUsages.Count > 0)
-            {
-                output.AppendLine("Top Namespace Usages:");
-                foreach (var usage in analysis.NamespaceUsages.OrderByDescending(n => n.UsageCount).Take(10))
-                    output.AppendLine($"  • {usage.Namespace}: {usage.UsageCount} usages");
-            }
+            output.AppendLine("Top namespaces:");
+            if (analysis.NamespaceUsages.Count == 0)
+                output.AppendLine("  (no using directives)");
+            foreach (var usage in analysis.NamespaceUsages)
+                output.AppendLine($"  • {usage.Namespace}: {usage.UsageCount}");
 
             return output.ToString();
         }
