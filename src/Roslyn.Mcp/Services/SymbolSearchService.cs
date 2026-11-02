@@ -170,42 +170,50 @@ namespace Roslyn.Mcp.Services
             return score;
         }
 
-        public async Task<IEnumerable<ReferenceResult>> FindReferencesAsync(
-            string symbolName, string solutionPath, bool includeDefinition)
+        public async Task<IReadOnlyList<ReferenceResult>> FindReferencesAsync(
+            string symbolName, string solutionPath, bool includeDefinition, CancellationToken cancellationToken)
         {
-            var solution = await _workspaceManager.GetSolutionAsync(solutionPath);
-            var targetSymbols = await _resolver.FindByNameAsync(solution, symbolName);
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
+            var targetSymbols = await _resolver.FindByNameAsync(solution, symbolName, cancellationToken);
 
             var allReferences = new List<ReferenceResult>();
 
             foreach (var symbol in targetSymbols)
             {
-                var references = await SymbolFinder.FindReferencesAsync(symbol, solution);
+                var references = await SymbolFinder.FindReferencesAsync(symbol, solution, cancellationToken);
 
                 foreach (var referencedSymbol in references)
                 {
+                    // Declaration sites are reported in Definition.Locations, never in Locations.
+                    if (includeDefinition)
+                    {
+                        foreach (var location in referencedSymbol.Definition.Locations.Where(l => l.IsInSource))
+                        {
+                            var definition = await CreateReferenceResultAsync(
+                                solution.GetDocument(location.SourceTree), location, symbol, isDefinition: true, cancellationToken);
+                            if (definition != null)
+                                allReferences.Add(definition);
+                        }
+                    }
+
                     foreach (var location in referencedSymbol.Locations)
                     {
-                        // Check if this location is a definition by comparing with the symbol's definition locations
-                        var isDefinition = referencedSymbol.Definition.Locations.Any(defLoc =>
-                            defLoc.SourceTree == location.Location.SourceTree &&
-                            defLoc.SourceSpan == location.Location.SourceSpan);
-
-                        if (!includeDefinition && isDefinition)
-                            continue;
-
-                        var reference = await CreateReferenceResultAsync(location, symbol, isDefinition);
+                        var reference = await CreateReferenceResultAsync(
+                            location.Document, location.Location, symbol, isDefinition: false, cancellationToken);
                         if (reference != null)
                             allReferences.Add(reference);
                     }
                 }
             }
 
+            // One row per line: collapses the copies from each target framework of a multi-targeted
+            // project, and a definition wins over a reference on its own line.
             return allReferences
-                .GroupBy(r => $"{r.DocumentPath}:{r.LineNumber}")
-                .Select(g => g.First()) // Remove duplicates
+                .GroupBy(r => (r.DocumentPath, r.LineNumber))
+                .Select(g => g.OrderByDescending(r => r.IsDefinition).First())
                 .OrderBy(r => r.DocumentPath)
-                .ThenBy(r => r.LineNumber);
+                .ThenBy(r => r.LineNumber)
+                .ToList();
         }
 
         public async Task<List<SymbolLocationResult>> FindImplementationsAsync(
@@ -308,13 +316,12 @@ namespace Roslyn.Mcp.Services
         }
 
         private static async Task<ReferenceResult?> CreateReferenceResultAsync(
-            ReferenceLocation location, ISymbol symbol, bool isDefinition)
+            Document? document, Location location, ISymbol symbol, bool isDefinition, CancellationToken cancellationToken)
         {
-            if (location.Document == null) return null;
+            if (document == null) return null;
 
-            var document = location.Document;
-            var sourceText = await document.GetTextAsync();
-            var lineSpan = location.Location.GetLineSpan();
+            var sourceText = await document.GetTextAsync(cancellationToken);
+            var lineSpan = location.GetLineSpan();
 
             // Get surrounding context
             var lineNumber = lineSpan.StartLinePosition.Line;
@@ -338,11 +345,11 @@ namespace Roslyn.Mcp.Services
                 LineText = line.ToString(),
                 Context = context,
                 IsDefinition = isDefinition,
-                ReferenceKind = DetermineReferenceKind(location.Location, symbol)
+                ReferenceKind = isDefinition ? "Definition" : DetermineReferenceKind(symbol)
             };
         }
 
-        private static string DetermineReferenceKind(Location location, ISymbol symbol)
+        private static string DetermineReferenceKind(ISymbol symbol)
         {
             // This is a simplified implementation
             // A more sophisticated version would analyze the syntax context
@@ -356,10 +363,11 @@ namespace Roslyn.Mcp.Services
             };
         }
 
-        public async Task<SymbolInfo?> GetSymbolInfoAsync(string symbolName, string solutionPath)
+        public async Task<SymbolInfo?> GetSymbolInfoAsync(
+            string symbolName, string solutionPath, CancellationToken cancellationToken)
         {
-            var solution = await _workspaceManager.GetSolutionAsync(solutionPath);
-            var symbols = await _resolver.FindByNameAsync(solution, symbolName);
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
+            var symbols = await _resolver.FindByNameAsync(solution, symbolName, cancellationToken);
             var symbol = symbols.FirstOrDefault();
             var otherMatches = symbols.Skip(1).Select(s => s.ToDisplayString()).Take(10).ToList();
 
@@ -374,7 +382,7 @@ namespace Roslyn.Mcp.Services
                 DeclaringType = symbol.ContainingType?.Name ?? "",
                 Namespace = symbol.ContainingNamespace?.ToDisplayString() ?? "",
                 Assembly = symbol.ContainingAssembly?.Name ?? "",
-                Documentation = symbol.GetDocumentationCommentXml() ?? ""
+                Documentation = symbol.GetDocumentationCommentXml(cancellationToken: cancellationToken) ?? ""
             };
 
             // Add method-specific information

@@ -153,6 +153,156 @@ public sealed class SymbolSearchServiceTests
             "*", TestPaths.SampleSolutionPath, SymbolTypeFilter.Parse("class"), ignoreCase: true, cts.Token));
     }
 
+    [TestMethod]
+    public async Task FindReferencesAsync_IncludeDefinition_HasDefinitionEntry()
+    {
+        var results = await FindReferencesAsync("OrderRepository", includeDefinition: true);
+
+        var definition = Assert.ContainsSingle(results.Where(r => r.IsDefinition && r.ReferenceKind == "Definition"));
+        Assert.EndsWith("OrderRepository.cs", definition.DocumentPath);
+        Assert.AreEqual(5, definition.LineNumber);
+    }
+
+    [TestMethod]
+    public async Task FindReferencesAsync_ExcludeDefinition_NoDefinitionEntry()
+    {
+        var results = await FindReferencesAsync("OrderRepository", includeDefinition: false);
+
+        Assert.IsNotEmpty(results);
+        Assert.IsFalse(results.Any(r => r.IsDefinition), "No result should be a definition.");
+        Assert.IsFalse(results.Any(r => r.DocumentPath.EndsWith("OrderRepository.cs", StringComparison.Ordinal)),
+            "The declaration line must not be reported when includeDefinition is false.");
+    }
+
+    [TestMethod]
+    public async Task FindReferencesAsync_CrossProject_FindsAppUsage()
+    {
+        var results = await FindReferencesAsync("OrderService", includeDefinition: false);
+
+        var appUsage = Assert.ContainsSingle(results.Where(r => r.DocumentPath.EndsWith("Program.cs", StringComparison.Ordinal)));
+        Assert.AreEqual("Sample.App", appUsage.ProjectName);
+        Assert.AreEqual(10, appUsage.LineNumber);
+    }
+
+    [TestMethod]
+    public async Task FindReferencesAsync_SameLineDefinitionAndReference_KeepsDefinition()
+    {
+        // OrderService.cs line 16 declares the cascaded override and calls base.Validate on the same line.
+        static bool IsOverrideLine(ReferenceResult r) =>
+            r.DocumentPath.EndsWith("OrderService.cs", StringComparison.Ordinal) && r.LineNumber == 16;
+
+        var referencesOnly = await FindReferencesAsync("OrderServiceBase.Validate", includeDefinition: false);
+        var withDefinitions = await FindReferencesAsync("OrderServiceBase.Validate", includeDefinition: true);
+
+        Assert.IsFalse(Assert.ContainsSingle(referencesOnly.Where(IsOverrideLine)).IsDefinition);
+        var overrideLine = Assert.ContainsSingle(withDefinitions.Where(IsOverrideLine));
+        Assert.IsTrue(overrideLine.IsDefinition);
+        Assert.AreEqual("Definition", overrideLine.ReferenceKind);
+    }
+
+    [TestMethod]
+    public async Task FindReferencesAsync_MultiTargeted_NoDuplicates()
+    {
+        var results = await FindReferencesAsync("Order", includeDefinition: true);
+
+        Assert.HasCount(results.Count, results.Select(r => (r.DocumentPath, r.LineNumber)).Distinct().ToList());
+    }
+
+    [TestMethod]
+    public async Task GetSymbolInfoAsync_Method_HasParametersAndReturnType()
+    {
+        var info = await s_service.GetSymbolInfoAsync("Classify", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        Assert.IsNotNull(info);
+        CollectionAssert.AreEqual(new[] { "Sample.Core.Order order" }, info.Parameters);
+        Assert.AreEqual("string", info.ReturnType);
+    }
+
+    [TestMethod]
+    public async Task GetSymbolInfoAsync_Ambiguous_ListsOtherMatches()
+    {
+        var info = await s_service.GetSymbolInfoAsync("Validate", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        Assert.IsNotNull(info);
+        Assert.HasCount(1, info.OtherMatches);
+    }
+
+    [TestMethod]
+    public async Task GetSymbolInfoAsync_Unknown_Null()
+    {
+        var info = await s_service.GetSymbolInfoAsync("DoesNotExist", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        Assert.IsNull(info);
+    }
+
+    [TestMethod]
+    public async Task FindImplementationsAsync_Interface_FindsClass()
+    {
+        var results = await s_service.FindImplementationsAsync("IOrderRepository", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        var result = Assert.ContainsSingle(results);
+        Assert.AreEqual("Sample.Core.OrderRepository", result.DisplayName);
+        Assert.AreEqual("implements IOrderRepository", result.Relation);
+    }
+
+    [TestMethod]
+    public async Task FindImplementationsAsync_InterfaceMember_FindsImplementation()
+    {
+        var results = await s_service.FindImplementationsAsync("IOrderRepository.Store", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        var result = Assert.ContainsSingle(results);
+        Assert.AreEqual("Sample.Core.OrderRepository.Store(Sample.Core.Order)", result.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task FindImplementationsAsync_BaseClass_FindsDerived()
+    {
+        var results = await s_service.FindImplementationsAsync("OrderServiceBase", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        var result = Assert.ContainsSingle(results);
+        Assert.AreEqual("Sample.Core.OrderService<T>", result.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task FindImplementationsAsync_VirtualMember_FindsOverride()
+    {
+        var results = await s_service.FindImplementationsAsync("OrderServiceBase.Validate", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        var result = Assert.ContainsSingle(results);
+        Assert.AreEqual("Sample.Core.OrderService<T>.Validate(Sample.Core.Order)", result.DisplayName);
+        Assert.AreEqual("overrides OrderServiceBase.Validate", result.Relation);
+    }
+
+    [TestMethod]
+    public async Task FindCallersAsync_Method_FindsCallerInOtherProject()
+    {
+        var results = await s_service.FindCallersAsync("OrderService.Save", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        var result = Assert.ContainsSingle(results);
+        Assert.AreEqual("Sample.App.Program.Main()", result.DisplayName);
+        Assert.EndsWith("Program.cs", result.FilePath);
+    }
+
+    [TestMethod]
+    public async Task FindCallersAsync_InterfaceMember_FindsCallThroughInterface()
+    {
+        var results = await s_service.FindCallersAsync("IOrderRepository.Store", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        var result = Assert.ContainsSingle(results);
+        Assert.AreEqual("Sample.Core.OrderService<T>.Save(T)", result.DisplayName);
+    }
+
+    [TestMethod]
+    public async Task FindCallersAsync_Type_Empty()
+    {
+        var results = await s_service.FindCallersAsync("Order", TestPaths.SampleSolutionPath, CancellationToken.None);
+
+        Assert.IsEmpty(results);
+    }
+
+    private static Task<IReadOnlyList<ReferenceResult>> FindReferencesAsync(string symbolName, bool includeDefinition) =>
+        s_service.FindReferencesAsync(symbolName, TestPaths.SampleSolutionPath, includeDefinition, CancellationToken.None);
+
     private static Task<IReadOnlyList<SymbolSearchResult>> SearchAsync(
         string pattern, string symbolTypes, bool ignoreCase = true) =>
         s_service.SearchSymbolsAsync(

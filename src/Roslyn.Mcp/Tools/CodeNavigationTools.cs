@@ -70,11 +70,13 @@ namespace Roslyn.Mcp.Tools
             ILogger<CodeNavigationTools> logger,
             [Description(SymbolNameDescription)] string symbolName,
             [Description(SolutionPathDescription)] string solutionPath,
-            [Description("Include symbol definition in results")] bool includeDefinition = true)
+            [Description("Include symbol definition in results")] bool includeDefinition = true,
+            CancellationToken cancellationToken = default)
         {
             return ExecuteAsync(validator, logger, solutionPath, "find references", async () =>
             {
-                var results = await searchService.FindReferencesAsync(symbolName, solutionPath, includeDefinition);
+                var results = await searchService.FindReferencesAsync(
+                    symbolName, solutionPath, includeDefinition, cancellationToken);
                 return FormatReferenceResults(results);
             });
         }
@@ -87,11 +89,12 @@ namespace Roslyn.Mcp.Tools
             SymbolSearchService searchService,
             ILogger<CodeNavigationTools> logger,
             [Description(SymbolNameDescription)] string symbolName,
-            [Description(SolutionPathDescription)] string solutionPath)
+            [Description(SolutionPathDescription)] string solutionPath,
+            CancellationToken cancellationToken = default)
         {
             return ExecuteAsync(validator, logger, solutionPath, "get symbol info", async () =>
             {
-                var info = await searchService.GetSymbolInfoAsync(symbolName, solutionPath);
+                var info = await searchService.GetSymbolInfoAsync(symbolName, solutionPath, cancellationToken);
                 return FormatSymbolInfo(info);
             });
         }
