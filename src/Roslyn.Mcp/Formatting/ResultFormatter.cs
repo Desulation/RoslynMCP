@@ -217,7 +217,7 @@ namespace Roslyn.Mcp.Formatting
         {
             var output = new StringBuilder();
             output.AppendLine("**Code Complexity Analysis**\n");
-            output.AppendLine($"Found {results.Count} methods with high complexity:\n");
+            output.AppendLine($"Found {results.Count} members with high complexity:\n");
 
             foreach (var result in results.OrderByDescending(r => r.Complexity).Take(20))
             {
@@ -229,7 +229,7 @@ namespace Roslyn.Mcp.Formatting
             }
 
             if (results.Count > 20)
-                output.AppendLine($"... and {results.Count - 20} more methods with high complexity");
+                output.AppendLine($"... and {results.Count - 20} more members with high complexity");
 
             return output.ToString();
         }

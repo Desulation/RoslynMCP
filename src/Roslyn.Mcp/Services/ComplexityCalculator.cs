@@ -11,7 +11,8 @@ namespace Roslyn.Mcp.Services
     public static class ComplexityCalculator
     {
         /// <summary>
-        /// True for methods, constructors, destructors, operators and accessors that have a body.
+        /// True for methods, constructors, destructors, operators and accessors that have a body, and for
+        /// expression-bodied properties and indexers (which stand for their getter).
         /// </summary>
         public static bool IsMemberLike(SyntaxNode node)
         {
@@ -19,6 +20,8 @@ namespace Roslyn.Mcp.Services
             {
                 BaseMethodDeclarationSyntax method => method.Body != null || method.ExpressionBody != null,
                 AccessorDeclarationSyntax accessor => accessor.Body != null || accessor.ExpressionBody != null,
+                PropertyDeclarationSyntax property => property.ExpressionBody != null,
+                IndexerDeclarationSyntax indexer => indexer.ExpressionBody != null,
                 _ => false,
             };
         }
@@ -29,7 +32,8 @@ namespace Roslyn.Mcp.Services
 
             var nodes = memberDeclaration.DescendantNodes(descendIntoChildren: n =>
                 n == memberDeclaration ||
-                n is not (BaseMethodDeclarationSyntax or AccessorDeclarationSyntax or BaseTypeDeclarationSyntax));
+                n is not (BaseMethodDeclarationSyntax or AccessorDeclarationSyntax or
+                    PropertyDeclarationSyntax or IndexerDeclarationSyntax or BaseTypeDeclarationSyntax));
 
             foreach (var node in nodes)
             {

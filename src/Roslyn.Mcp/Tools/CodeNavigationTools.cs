@@ -215,7 +215,7 @@ namespace Roslyn.Mcp.Tools
 
         [McpServerTool(Name = "roslyn_analyze_code_complexity", Title = "Analyze code complexity",
             ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = false)]
-        [Description("Find methods whose cyclomatic complexity is at or above a threshold.")]
+        [Description("Find members (methods, constructors, operators, accessors) whose cyclomatic complexity is at or above a threshold.")]
         public static Task<string> AnalyzeCodeComplexity(
             SecurityValidator validator,
             CodeAnalysisService analysisService,

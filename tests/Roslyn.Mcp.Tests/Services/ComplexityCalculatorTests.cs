@@ -138,6 +138,34 @@ public sealed class ComplexityCalculatorTests
     }
 
     [TestMethod]
+    public void IsMemberLike_ExpressionBodiedProperty_True()
+    {
+        var root = Parse("bool a; int P => a ? 1 : 2; int this[int i] => a ? i : 0;");
+
+        Assert.IsTrue(ComplexityCalculator.IsMemberLike(root.DescendantNodes().OfType<PropertyDeclarationSyntax>().Single()));
+        Assert.IsTrue(ComplexityCalculator.IsMemberLike(root.DescendantNodes().OfType<IndexerDeclarationSyntax>().Single()));
+    }
+
+    [TestMethod]
+    public void Calculate_ExpressionBodiedProperty_Counted()
+    {
+        var member = FirstMemberLike("bool a; int P => a ? 1 : 2;");
+
+        Assert.IsInstanceOfType<PropertyDeclarationSyntax>(member);
+        Assert.AreEqual(2, ComplexityCalculator.Calculate(member));
+    }
+
+    [TestMethod]
+    public void Calculate_TypeWalk_SkipsExpressionBodiedMembers()
+    {
+        // Expression-bodied properties and indexers are measured on their own, like methods and accessors.
+        var type = Parse("bool a; int P => a ? 1 : 2; int this[int i] => a ? i : 0; void M() { if (a) { } }")
+            .DescendantNodes().OfType<ClassDeclarationSyntax>().Single();
+
+        Assert.AreEqual(1, ComplexityCalculator.Calculate(type));
+    }
+
+    [TestMethod]
     public void IsMemberLike_AutoProperty_False()
     {
         var root = Parse("int P { get; set; }");

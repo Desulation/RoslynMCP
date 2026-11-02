@@ -61,6 +61,51 @@ public sealed class CodeAnalysisServiceTests
     }
 
     [TestMethod]
+    public async Task AnalyzeComplexityAsync_Constructor_NamedAfterType()
+    {
+        var results = await s_service.AnalyzeComplexityAsync(TestPaths.SampleSolutionPath, 1, CancellationToken.None);
+
+        var constructor = results.Single(r => r.FilePath.EndsWith("OrderService.cs", StringComparison.Ordinal) && r.LineNumber == 9);
+        Assert.AreEqual("OrderService(IOrderRepository)", constructor.MemberName);
+        Assert.AreEqual("OrderService", constructor.ContainingType);
+        Assert.AreEqual(1, constructor.Complexity);
+    }
+
+    [TestMethod]
+    public async Task AnalyzeComplexityAsync_PropertiesAndIndexers_NamedLikeAccessors()
+    {
+        using var copy = FixtureCopy.Create();
+        File.WriteAllText(copy.CoreFile("Accessors.cs"), """
+            namespace Sample.Core;
+
+            public class Accessors
+            {
+                private bool _flag;
+
+                public int Arrow => _flag ? 1 : 2;
+
+                public int Block
+                {
+                    get { return _flag ? 1 : 2; }
+                }
+
+                public int this[int index] => _flag ? index : 0;
+            }
+            """);
+        using var manager = new WorkspaceManager(NullLogger<WorkspaceManager>.Instance, new WorkspaceOptions());
+        var service = new CodeAnalysisService(NullLogger<CodeAnalysisService>.Instance, manager);
+
+        var results = await service.AnalyzeComplexityAsync(copy.SolutionPath, 2, CancellationToken.None);
+
+        var accessors = results
+            .Where(r => r.ContainingType == "Accessors")
+            .OrderBy(r => r.LineNumber)
+            .Select(r => $"{r.LineNumber}:{r.MemberName}:{r.Complexity}")
+            .ToArray();
+        CollectionAssert.AreEqual(new[] { "7:Arrow.get:2", "11:Block.get:2", "14:this[int].get:2" }, accessors);
+    }
+
+    [TestMethod]
     public async Task AnalyzeDependenciesAsync_ProjectGraph_AppReferencesCore()
     {
         var analysis = await s_service.AnalyzeDependenciesAsync(TestPaths.SampleSolutionPath, 20, CancellationToken.None);

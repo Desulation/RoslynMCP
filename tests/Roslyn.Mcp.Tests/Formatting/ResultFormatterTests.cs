@@ -359,7 +359,7 @@ public sealed class ResultFormatterTests
             {
                 "**Code Complexity Analysis**",
                 "",
-                "Found 22 methods with high complexity:",
+                "Found 22 members with high complexity:",
                 "",
                 "**OrderService.M22** (Complexity: 22)",
                 "  Location: OrderService.cs:22",
@@ -372,7 +372,7 @@ public sealed class ResultFormatterTests
             lines.Take(11).ToArray());
         Assert.AreEqual(20, lines.Count(l => l.StartsWith("**OrderService.", StringComparison.Ordinal)));
         Assert.AreEqual("**OrderService.M3** (Complexity: 3)", lines.Last(l => l.StartsWith("**OrderService.", StringComparison.Ordinal)));
-        Assert.AreEqual("... and 2 more methods with high complexity", lines[^2]);
+        Assert.AreEqual("... and 2 more members with high complexity", lines[^2]);
     }
 
     /// <summary>Splits on line breaks, accepting both the embedded "\n" and Environment.NewLine.</summary>

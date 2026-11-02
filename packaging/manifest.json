@@ -58,7 +58,7 @@
     },
     {
       "name": "roslyn_analyze_code_complexity",
-      "description": "Find methods whose cyclomatic complexity is at or above a threshold."
+      "description": "Find members (methods, constructors, operators, accessors) whose cyclomatic complexity is at or above a threshold."
     },
     {
       "name": "roslyn_reload_workspace",

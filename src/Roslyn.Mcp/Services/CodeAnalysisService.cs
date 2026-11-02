@@ -300,7 +300,12 @@ namespace Roslyn.Mcp.Services
                         if (complexity < threshold)
                             continue;
 
-                        var symbol = model.GetDeclaredSymbol(member, cancellationToken);
+                        // An expression-bodied property or indexer is reported as its getter, like accessor results.
+                        var symbol = model.GetDeclaredSymbol(member, cancellationToken) switch
+                        {
+                            IPropertySymbol property => property.GetMethod,
+                            var declared => declared,
+                        };
                         var containingNamespace = symbol?.ContainingNamespace;
                         results.Add(new ComplexityResult
                         {
