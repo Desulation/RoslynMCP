@@ -59,6 +59,8 @@ internal static class Program
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
+        builder.Services.AddSingleton<WorkspaceOptions>();
+        builder.Services.AddSingleton<WorkspaceManager>();
         builder.Services.AddSingleton<CodeAnalysisService>();
         builder.Services.AddSingleton<SymbolSearchService>();
         builder.Services.AddSingleton<SecurityValidator>();

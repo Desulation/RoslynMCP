@@ -195,7 +195,7 @@ namespace Roslyn.Mcp.Tools
         [Description("Find methods whose cyclomatic complexity is at or above a threshold.")]
         public static Task<string> AnalyzeCodeComplexity(
             SecurityValidator validator,
-            CodeAnalysisService analysisService,
+            WorkspaceManager workspaceManager,
             ILogger<CodeNavigationTools> logger,
             [Description(SolutionPathDescription)] string solutionPath,
             [Description("Complexity threshold (1-10)")] int threshold = 5,
@@ -203,7 +203,7 @@ namespace Roslyn.Mcp.Tools
         {
             return ExecuteAsync(validator, logger, solutionPath, "complexity analysis", async () =>
             {
-                var solution = await analysisService.GetSolutionAsync(solutionPath, cancellationToken);
+                var solution = await workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
                 var complexityResults = new List<ComplexityResult>();
 
                 foreach (var project in solution.Projects.Where(p => p.SupportsCompilation))
@@ -251,14 +251,14 @@ namespace Roslyn.Mcp.Tools
                      "itself when files change on disk; use this if results still look stale, or to see MSBuild load warnings.")]
         public static Task<string> ReloadWorkspace(
             SecurityValidator validator,
-            CodeAnalysisService analysisService,
+            WorkspaceManager workspaceManager,
             ILogger<CodeNavigationTools> logger,
             [Description(SolutionPathDescription)] string solutionPath,
             CancellationToken cancellationToken = default)
         {
             return ExecuteAsync(validator, logger, solutionPath, "reload workspace", async () =>
             {
-                var summary = await analysisService.ReloadAsync(solutionPath, cancellationToken);
+                var summary = await workspaceManager.ReloadAsync(solutionPath, cancellationToken);
                 return FormatWorkspaceSummary(summary);
             });
         }

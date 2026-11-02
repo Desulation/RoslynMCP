@@ -8,7 +8,7 @@ namespace Roslyn.Mcp.Services
 
         /// <summary>
         /// Accepts an absolute path to a .sln, .slnx or .csproj file, or to a directory
-        /// that contains one (resolved later by CodeAnalysisService.ResolveSolutionPath).
+        /// that contains one (resolved later by WorkspaceManager.ResolveSolutionPath).
         /// </summary>
         public bool ValidateSolutionPath(string path)
         {

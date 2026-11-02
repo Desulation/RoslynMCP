@@ -9,8 +9,8 @@ public sealed class FixtureSmokeTests
     [TestMethod]
     public async Task GetSolutionAsync_SampleSolution_LoadsThreeProjects()
     {
-        using var service = new CodeAnalysisService(NullLogger<CodeAnalysisService>.Instance);
-        var solution = await service.GetSolutionAsync(TestPaths.SampleSolutionPath);
+        using var manager = new WorkspaceManager(NullLogger<WorkspaceManager>.Instance, new WorkspaceOptions());
+        var solution = await manager.GetSolutionAsync(TestPaths.SampleSolutionPath);
         CollectionAssert.AreEquivalent(
             new[] { "Sample.App", "Sample.Core(net10.0)", "Sample.Core(netstandard2.0)" },
             solution.Projects.Select(p => p.Name).ToArray());

@@ -10,20 +10,19 @@ namespace Roslyn.Mcp.Services
 {
     public class SymbolSearchService
     {
-        private readonly CodeAnalysisService _codeAnalysis;
         private readonly ILogger<SymbolSearchService> _logger;
+        private readonly WorkspaceManager _workspaceManager;
 
-        public SymbolSearchService(CodeAnalysisService codeAnalysis,
-            ILogger<SymbolSearchService> logger)
+        public SymbolSearchService(ILogger<SymbolSearchService> logger, WorkspaceManager workspaceManager)
         {
-            _codeAnalysis = codeAnalysis;
             _logger = logger;
+            _workspaceManager = workspaceManager;
         }
 
         public async Task<IEnumerable<SymbolSearchResult>> SearchSymbolsAsync(
             string pattern, string solutionPath, string symbolTypes, bool ignoreCase)
         {
-            var solution = await _codeAnalysis.GetSolutionAsync(solutionPath);
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath);
             var typeFilter = ParseSymbolTypes(symbolTypes);
             var regex = CreateWildcardRegex(pattern, ignoreCase);
 
@@ -233,7 +232,7 @@ namespace Roslyn.Mcp.Services
         public async Task<IEnumerable<ReferenceResult>> FindReferencesAsync(
             string symbolName, string solutionPath, bool includeDefinition)
         {
-            var solution = await _codeAnalysis.GetSolutionAsync(solutionPath);
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath);
             var targetSymbols = await FindSymbolsByNameAsync(solution, symbolName);
 
             var allReferences = new List<ReferenceResult>();
@@ -318,7 +317,7 @@ namespace Roslyn.Mcp.Services
         public async Task<List<SymbolLocationResult>> FindImplementationsAsync(
             string symbolName, string solutionPath, CancellationToken cancellationToken = default)
         {
-            var solution = await _codeAnalysis.GetSolutionAsync(solutionPath, cancellationToken);
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
             var targets = await FindSymbolsByNameAsync(solution, symbolName);
             var results = new List<SymbolLocationResult>();
 
@@ -367,7 +366,7 @@ namespace Roslyn.Mcp.Services
         public async Task<List<SymbolLocationResult>> FindCallersAsync(
             string symbolName, string solutionPath, CancellationToken cancellationToken = default)
         {
-            var solution = await _codeAnalysis.GetSolutionAsync(solutionPath, cancellationToken);
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath, cancellationToken);
             var targets = (await FindSymbolsByNameAsync(solution, symbolName))
                 .Where(s => s is IMethodSymbol or IPropertySymbol or IEventSymbol);
             var results = new List<SymbolLocationResult>();
@@ -465,7 +464,7 @@ namespace Roslyn.Mcp.Services
 
         public async Task<SymbolInfo?> GetSymbolInfoAsync(string symbolName, string solutionPath)
         {
-            var solution = await _codeAnalysis.GetSolutionAsync(solutionPath);
+            var solution = await _workspaceManager.GetSolutionAsync(solutionPath);
             var symbols = await FindSymbolsByNameAsync(solution, symbolName);
             var symbol = symbols.FirstOrDefault();
             var otherMatches = symbols.Skip(1).Select(s => s.ToDisplayString()).Take(10).ToList();
