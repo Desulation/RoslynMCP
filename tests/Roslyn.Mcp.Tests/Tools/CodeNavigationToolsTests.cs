@@ -157,6 +157,30 @@ public sealed class CodeNavigationToolsTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_HintLookupThrows_ReturnsActionResult()
+    {
+        var directory = Directory.CreateTempSubdirectory("roslyn-mcp-tests-");
+        try
+        {
+            File.WriteAllText(Path.Combine(directory.FullName, "A.csproj"), "<Project />");
+
+            // After the action, the directory holds two projects, so resolving it for the hint throws.
+            var result = await CodeNavigationTools.ExecuteAsync(
+                s_validator, s_services.Workspaces, s_logger, directory.FullName, "test", () =>
+                {
+                    File.WriteAllText(Path.Combine(directory.FullName, "B.csproj"), "<Project />");
+                    return Task.FromResult("result");
+                });
+
+            Assert.AreEqual("result", result);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void AllTools_HaveReadOnlyAnnotations()
     {
         var tools = typeof(CodeNavigationTools)

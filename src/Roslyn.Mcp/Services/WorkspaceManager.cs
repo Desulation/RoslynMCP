@@ -49,8 +49,9 @@ namespace Roslyn.Mcp.Services
             public required List<string> LoadWarnings { get; init; }
             public DateTime LastChecked { get; set; }
 
-            // True until the load warnings have been announced once (see TryTakeLoadHint).
-            public bool HintPending { get; set; }
+            // 1 until the load warnings have been announced once (see TryTakeLoadHint). Read and
+            // cleared with Interlocked so taking the hint never waits for the per-solution gate.
+            public int HintPending;
         }
 
         public WorkspaceManager(ILogger<WorkspaceManager> logger, WorkspaceOptions options)
@@ -135,29 +136,21 @@ namespace Roslyn.Mcp.Services
 
         /// <summary>
         /// Returns true exactly once per load when that load produced MSBuild warnings, then false
-        /// until the workspace is loaded again. Also false when the solution is not loaded.
+        /// until the workspace is loaded again. Also false when the solution is not loaded, including
+        /// while a load is still in progress. Lock-free: it never waits for a load or refresh.
         /// </summary>
         public bool TryTakeLoadHint(string solutionPath, out int warningCount)
         {
             var fullPath = ResolveSolutionPath(solutionPath);
-            var gate = _locks.GetOrAdd(fullPath, _ => new SemaphoreSlim(1, 1));
-            gate.Wait();
-            try
+            if (_workspaces.TryGetValue(fullPath, out var cached) &&
+                Interlocked.Exchange(ref cached.HintPending, 0) == 1)
             {
-                if (_workspaces.TryGetValue(fullPath, out var cached) && cached.HintPending)
-                {
-                    cached.HintPending = false;
-                    warningCount = cached.LoadWarnings.Count;
-                    return true;
-                }
+                warningCount = cached.LoadWarnings.Count;
+                return true;
+            }
 
-                warningCount = 0;
-                return false;
-            }
-            finally
-            {
-                gate.Release();
-            }
+            warningCount = 0;
+            return false;
         }
 
         private async Task<CachedWorkspace> GetWorkspaceAsync(string solutionPath, CancellationToken cancellationToken)
@@ -246,7 +239,8 @@ namespace Roslyn.Mcp.Services
                 SourceRoots = projectDirectories,
                 LoadWarnings = warnings,
                 LastChecked = DateTime.UtcNow,
-                HintPending = warnings.Count > 0
+                // Published to readers by the ConcurrentDictionary insert in GetWorkspaceAsync.
+                HintPending = warnings.Count > 0 ? 1 : 0
             };
         }
 

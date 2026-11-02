@@ -248,7 +248,7 @@ namespace Roslyn.Mcp.Tools
                 var summary = await workspaces.ReloadAsync(solutionPath, cancellationToken);
 
                 // This result lists the warnings themselves, so the next tool call must not repeat them as a hint.
-                workspaces.TryTakeLoadHint(solutionPath, out _);
+                TryTakeLoadHint(workspaces, logger, solutionPath, out _);
                 return ResultFormatter.WorkspaceSummary(summary);
             }, appendLoadHint: false);
         }
@@ -273,7 +273,7 @@ namespace Roslyn.Mcp.Tools
                 var result = await action();
 
                 // Only a successful result announces the load warnings, so an error never uses up the hint.
-                if (appendLoadHint && workspaces.TryTakeLoadHint(solutionPath, out var warningCount))
+                if (appendLoadHint && TryTakeLoadHint(workspaces, logger, solutionPath, out var warningCount))
                 {
                     result += $"\n(Workspace loaded with {warningCount} MSBuild warnings; " +
                               "call roslyn_reload_workspace to see them.)";
@@ -303,6 +303,22 @@ namespace Roslyn.Mcp.Tools
                 // Log full error details but return safe message
                 logger.LogError(ex, "Unexpected error during {Operation}", operation);
                 return $"Error: An unexpected error occurred during the {operation} operation.";
+            }
+        }
+
+        // The hint is an extra; failing to look it up (for example because the solution path no longer
+        // resolves) must not replace the result the action already produced.
+        private static bool TryTakeLoadHint(WorkspaceManager workspaces, ILogger logger, string solutionPath, out int warningCount)
+        {
+            try
+            {
+                return workspaces.TryTakeLoadHint(solutionPath, out warningCount);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Could not look up the load hint for {SolutionPath}", solutionPath);
+                warningCount = 0;
+                return false;
             }
         }
     }

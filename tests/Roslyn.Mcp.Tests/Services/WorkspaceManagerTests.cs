@@ -290,6 +290,22 @@ public sealed class WorkspaceManagerTests
         Assert.IsTrue(manager.TryTakeLoadHint(copy.SolutionPath, out _));
     }
 
+    [TestMethod]
+    public async Task TryTakeLoadHint_DuringLoad_ReturnsWithoutWaiting()
+    {
+        using var manager = CreateManager();
+
+        // The load holds the per-solution gate for the whole MSBuild open (seconds).
+        var loading = manager.GetSolutionAsync(TestPaths.SampleSolutionPath);
+        var taken = manager.TryTakeLoadHint(TestPaths.SampleSolutionPath, out var warningCount);
+        var loadFinishedFirst = loading.IsCompleted;
+        await loading;
+
+        Assert.IsFalse(loadFinishedFirst, "TryTakeLoadHint waited for the load to finish.");
+        Assert.IsFalse(taken);
+        Assert.AreEqual(0, warningCount);
+    }
+
     private static WorkspaceManager CreateManager() => new(
         NullLogger<WorkspaceManager>.Instance,
         new WorkspaceOptions { RefreshInterval = TimeSpan.Zero });
