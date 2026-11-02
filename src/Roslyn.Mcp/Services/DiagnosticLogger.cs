@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace RoslynMcpServer.Services
+namespace Roslyn.Mcp.Services
 {
     public class DiagnosticLogger
     {

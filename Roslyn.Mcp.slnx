@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Roslyn.Mcp/Roslyn.Mcp.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+</Solution>

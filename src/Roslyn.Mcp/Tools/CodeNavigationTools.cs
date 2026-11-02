@@ -3,12 +3,12 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
-using RoslynMcpServer.Models;
-using RoslynMcpServer.Services;
+using Roslyn.Mcp.Models;
+using Roslyn.Mcp.Services;
 using System.ComponentModel;
 using System.Text;
 
-namespace RoslynMcpServer.Tools
+namespace Roslyn.Mcp.Tools
 {
     /// <summary>
     /// Read-only semantic code tools. Names use the "roslyn_" prefix so they sit cleanly next to
@@ -352,7 +352,7 @@ namespace RoslynMcpServer.Tools
             return output.ToString();
         }
 
-        private static string FormatSymbolInfo(RoslynMcpServer.Models.SymbolInfo? info)
+        private static string FormatSymbolInfo(Roslyn.Mcp.Models.SymbolInfo? info)
         {
             if (info == null)
                 return "Symbol not found.";
@@ -371,14 +371,14 @@ namespace RoslynMcpServer.Tools
             if (!string.IsNullOrEmpty(info.ReturnType))
                 output.AppendLine($"Return Type: {info.ReturnType}");
 
-            if (info.Parameters.Any())
+            if (info.Parameters.Count > 0)
             {
                 output.AppendLine("Parameters:");
                 foreach (var param in info.Parameters)
                     output.AppendLine($"  • {param}");
             }
 
-            if (info.Attributes.Any())
+            if (info.Attributes.Count > 0)
             {
                 output.AppendLine("Attributes:");
                 foreach (var attr in info.Attributes)
@@ -388,7 +388,7 @@ namespace RoslynMcpServer.Tools
             if (!string.IsNullOrEmpty(info.SourceLocation))
                 output.AppendLine($"Location: {info.SourceLocation}");
 
-            if (info.OtherMatches.Any())
+            if (info.OtherMatches.Count > 0)
             {
                 output.AppendLine("Other symbols with this name (qualify the name to select one):");
                 foreach (var match in info.OtherMatches)
@@ -473,7 +473,7 @@ namespace RoslynMcpServer.Tools
             foreach (var project in summary.Projects)
                 output.AppendLine($"  • {project}");
 
-            if (summary.LoadWarnings.Any())
+            if (summary.LoadWarnings.Count > 0)
             {
                 output.AppendLine("\nMSBuild load warnings:");
                 foreach (var warning in summary.LoadWarnings.Take(20))
@@ -494,7 +494,7 @@ namespace RoslynMcpServer.Tools
             output.AppendLine($"  • Internal Symbols: {analysis.InternalSymbols}");
             output.AppendLine();
 
-            if (analysis.Dependencies.Any())
+            if (analysis.Dependencies.Count > 0)
             {
                 output.AppendLine("Dependencies:");
                 var groupedDeps = analysis.Dependencies.GroupBy(d => d.Type);
@@ -509,7 +509,7 @@ namespace RoslynMcpServer.Tools
                 output.AppendLine();
             }
 
-            if (analysis.NamespaceUsages.Any())
+            if (analysis.NamespaceUsages.Count > 0)
             {
                 output.AppendLine("Top Namespace Usages:");
                 foreach (var usage in analysis.NamespaceUsages.OrderByDescending(n => n.UsageCount).Take(10))

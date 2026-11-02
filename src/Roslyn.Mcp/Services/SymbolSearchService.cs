@@ -2,12 +2,12 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using RoslynMcpServer.Models;
+using Roslyn.Mcp.Models;
 using System.Text.RegularExpressions;
 using MsSymbolInfo = Microsoft.CodeAnalysis.SymbolInfo;
-using SymbolInfo = RoslynMcpServer.Models.SymbolInfo;
+using SymbolInfo = Roslyn.Mcp.Models.SymbolInfo;
 
-namespace RoslynMcpServer.Services
+namespace Roslyn.Mcp.Services
 {
     public class SymbolSearchService
     {
@@ -76,7 +76,7 @@ namespace RoslynMcpServer.Services
             return results;
         }
 
-        private Regex CreateWildcardRegex(string pattern, bool ignoreCase)
+        private static Regex CreateWildcardRegex(string pattern, bool ignoreCase)
         {
             // Convert wildcard pattern to regex
             var regexPattern = Regex.Escape(pattern)
@@ -89,7 +89,7 @@ namespace RoslynMcpServer.Services
             return new Regex($"^{regexPattern}$", options);
         }
 
-        private HashSet<SymbolKind> ParseSymbolTypes(string symbolTypes)
+        private static HashSet<SymbolKind> ParseSymbolTypes(string symbolTypes)
         {
             var types = new HashSet<SymbolKind>();
 
@@ -114,7 +114,7 @@ namespace RoslynMcpServer.Services
             return types;
         }
 
-        private IEnumerable<ISymbol> GetFilteredSymbols(Compilation compilation, HashSet<SymbolKind> typeFilter)
+        private static IEnumerable<ISymbol> GetFilteredSymbols(Compilation compilation, HashSet<SymbolKind> typeFilter)
         {
             // Only symbols declared in source: compilation.GlobalNamespace would also walk every
             // referenced assembly and repeat project-referenced symbols once per referencing project.
@@ -122,7 +122,7 @@ namespace RoslynMcpServer.Services
                 .Where(s => typeFilter.Contains(s.Kind));
         }
 
-        private IEnumerable<ISymbol> GetAllSymbolsRecursive(INamespaceSymbol namespaceSymbol)
+        private static IEnumerable<ISymbol> GetAllSymbolsRecursive(INamespaceSymbol namespaceSymbol)
         {
             foreach (var member in namespaceSymbol.GetMembers())
             {
@@ -143,7 +143,7 @@ namespace RoslynMcpServer.Services
             }
         }
 
-        private IEnumerable<ISymbol> GetTypeMembersRecursive(INamedTypeSymbol type)
+        private static IEnumerable<ISymbol> GetTypeMembersRecursive(INamedTypeSymbol type)
         {
             foreach (var member in type.GetMembers())
             {
@@ -161,7 +161,7 @@ namespace RoslynMcpServer.Services
             }
         }
 
-        private SymbolSearchResult CreateSearchResult(ISymbol symbol, Project project)
+        private static SymbolSearchResult CreateSearchResult(ISymbol symbol, Project project)
         {
             var location = symbol.Locations.FirstOrDefault();
             var lineNumber = location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0;
@@ -182,7 +182,7 @@ namespace RoslynMcpServer.Services
             };
         }
 
-        private string GetSymbolCategory(ISymbol symbol)
+        private static string GetSymbolCategory(ISymbol symbol)
         {
             return symbol switch
             {
@@ -196,7 +196,7 @@ namespace RoslynMcpServer.Services
             };
         }
 
-        private string GetSymbolSummary(ISymbol symbol)
+        private static string GetSymbolSummary(ISymbol symbol)
         {
             return symbol switch
             {
@@ -209,7 +209,7 @@ namespace RoslynMcpServer.Services
             };
         }
 
-        private double CalculateRelevanceScore(SymbolSearchResult result, string searchPattern)
+        private static double CalculateRelevanceScore(SymbolSearchResult result, string searchPattern)
         {
             double score = 0;
 
@@ -271,7 +271,7 @@ namespace RoslynMcpServer.Services
                 .ThenBy(r => r.LineNumber);
         }
 
-        private async Task<List<ISymbol>> FindSymbolsByNameAsync(Solution solution, string symbolName)
+        private static async Task<List<ISymbol>> FindSymbolsByNameAsync(Solution solution, string symbolName)
         {
             var symbols = new List<ISymbol>();
 
@@ -417,7 +417,7 @@ namespace RoslynMcpServer.Services
             };
         }
 
-        private async Task<ReferenceResult?> CreateReferenceResultAsync(
+        private static async Task<ReferenceResult?> CreateReferenceResultAsync(
             ReferenceLocation location, ISymbol symbol, bool isDefinition)
         {
             if (location.Document == null) return null;
@@ -452,7 +452,7 @@ namespace RoslynMcpServer.Services
             };
         }
 
-        private string DetermineReferenceKind(Location location, ISymbol symbol)
+        private static string DetermineReferenceKind(Location location, ISymbol symbol)
         {
             // This is a simplified implementation
             // A more sophisticated version would analyze the syntax context

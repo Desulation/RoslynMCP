@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <!-- Analyzer suppressions: one per line, with the reason. -->
+  <PropertyGroup>
+    <!-- CA1848: LoggerMessage delegates; a handful of log calls, none on a hot path. -->
+    <NoWarn>$(NoWarn);CA1848</NoWarn>
+    <!-- CA1873: expensive log arguments; same remedy as CA1848 (LoggerMessage), not worth it for these few calls. -->
+    <NoWarn>$(NoWarn);CA1873</NoWarn>
+  </PropertyGroup>
+</Project>

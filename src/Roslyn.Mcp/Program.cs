@@ -4,9 +4,9 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Microsoft.Build.Locator;
-using RoslynMcpServer.Services;
+using Roslyn.Mcp.Services;
 
-namespace RoslynMcpServer
+namespace Roslyn.Mcp
 {
     class Program
     {

@@ -4,9 +4,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.Extensions.Logging;
-using RoslynMcpServer.Models;
+using Roslyn.Mcp.Models;
 
-namespace RoslynMcpServer.Services
+namespace Roslyn.Mcp.Services
 {
     public class CodeAnalysisService : IDisposable
     {
@@ -604,6 +604,7 @@ namespace RoslynMcpServer.Services
             foreach (var cached in _workspaces.Values)
                 cached.Workspace.Dispose();
             _workspaces.Clear();
+            GC.SuppressFinalize(this);
         }
     }
 }

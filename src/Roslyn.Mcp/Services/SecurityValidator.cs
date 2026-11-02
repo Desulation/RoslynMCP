@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace RoslynMcpServer.Services
+namespace Roslyn.Mcp.Services
 {
     public class SecurityValidator
     {

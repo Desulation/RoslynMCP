@@ -1,10 +1,10 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using RoslynMcpServer.Models;
+using Roslyn.Mcp.Models;
 using System.Collections.Concurrent;
 
-namespace RoslynMcpServer.Services
+namespace Roslyn.Mcp.Services
 {
     public class FileAnalysisCache
     {
@@ -14,7 +14,7 @@ namespace RoslynMcpServer.Services
         public List<ComplexityResult> CachedComplexity { get; set; } = new();
     }
 
-    public class IncrementalAnalyzer
+    public sealed class IncrementalAnalyzer : IDisposable
     {
         private readonly Dictionary<string, FileAnalysisCache> _fileCache;
         private readonly SemaphoreSlim _analysisLock;
@@ -147,7 +147,7 @@ namespace RoslynMcpServer.Services
             }
         }
 
-        private List<SymbolSearchResult> ExtractSymbols(SyntaxNode root, Document document, SemanticModel semanticModel)
+        private static List<SymbolSearchResult> ExtractSymbols(SyntaxNode root, Document document, SemanticModel semanticModel)
         {
             var symbols = new List<SymbolSearchResult>();
 
@@ -178,7 +178,7 @@ namespace RoslynMcpServer.Services
             return symbols;
         }
 
-        private List<ComplexityResult> AnalyzeComplexity(SyntaxNode root, string filePath)
+        private static List<ComplexityResult> AnalyzeComplexity(SyntaxNode root, string filePath)
         {
             var complexityResults = new List<ComplexityResult>();
             var methods = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
@@ -204,7 +204,7 @@ namespace RoslynMcpServer.Services
             return complexityResults;
         }
 
-        private int CalculateCyclomaticComplexity(MethodDeclarationSyntax method)
+        private static int CalculateCyclomaticComplexity(MethodDeclarationSyntax method)
         {
             int complexity = 1; // Base complexity
 
@@ -228,19 +228,19 @@ namespace RoslynMcpServer.Services
             return complexity;
         }
 
-        private string GetContainingClassName(MethodDeclarationSyntax method)
+        private static string GetContainingClassName(MethodDeclarationSyntax method)
         {
             var classDeclaration = method.Ancestors().OfType<ClassDeclarationSyntax>().FirstOrDefault();
             return classDeclaration?.Identifier.ValueText ?? "";
         }
 
-        private string GetContainingNamespace(MethodDeclarationSyntax method)
+        private static string GetContainingNamespace(MethodDeclarationSyntax method)
         {
             var namespaceDeclaration = method.Ancestors().OfType<NamespaceDeclarationSyntax>().FirstOrDefault();
             return namespaceDeclaration?.Name.ToString() ?? "";
         }
 
-        private string GetSymbolCategory(ISymbol symbol)
+        private static string GetSymbolCategory(ISymbol symbol)
         {
             return symbol switch
             {
@@ -254,7 +254,7 @@ namespace RoslynMcpServer.Services
             };
         }
 
-        private string GetSymbolSummary(ISymbol symbol)
+        private static string GetSymbolSummary(ISymbol symbol)
         {
             return symbol switch
             {
@@ -277,6 +277,8 @@ namespace RoslynMcpServer.Services
 
             _fileCache[filePath] = cache;
         }
+
+        public void Dispose() => _analysisLock.Dispose();
     }
 
     public static class EnumerableExtensions

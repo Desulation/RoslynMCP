@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis;
 
-namespace RoslynMcpServer.Models
+namespace Roslyn.Mcp.Models
 {
     public class SymbolSearchResult
     {
